@@ -1,0 +1,17 @@
+From: discfw
+Subject: [PATCH] meson: link-test statx()
+
+uClibc-ng declares statx() but implements it only with kernel headers >= 4.11,
+so a compile-only probe enables HAVE_STATX and libgio fails to link.
+---
+--- a/meson.build	2026-11-25 00:06:53.034568510 +0100
++++ b/meson.build	2026-11-25 00:06:53.035611181 +0100
+@@ -495,7 +495,7 @@
+     return statx (AT_FDCWD, "/", AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS | STATX_BTIME, &stat_buf);
+   }
+   '''
+-if host_system != 'android' and cc.compiles(statx_code, name : 'statx() test')
++if host_system != 'android' and cc.links(statx_code, name : 'statx() test')
+   glib_conf.set('HAVE_STATX', 1)
+ endif
+ 

@@ -1,0 +1,7 @@
+config BR2_PACKAGE_DISCUI
+	bool "discui"
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	select BR2_PACKAGE_LVGL
+	select BR2_PACKAGE_LIBMPDCLIENT
+	help
+	  Folder browser and now-playing UI (LVGL, MPD client).

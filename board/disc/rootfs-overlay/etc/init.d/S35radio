@@ -1,0 +1,91 @@
+#!/bin/sh
+# AP6212 (BCM43438): bcmdhd powers both halves (it owns bt_reg_on). It loads at every boot and is never unloaded:
+# it needs a 1 MB contiguous buffer, which fails once memory is fragmented (the chip stays powered off until used).
+# Wi-Fi: wpa_supplicant + udhcpc (hook starts mdnsd/ntpd); power save on, or Wi-Fi starves Bluetooth A2DP (shared radio). Bluetooth: firmware over ttyS0 as stock, then bluealsa.
+S=/usr/data/discfw
+WCONF=$S/wifi/wpa_supplicant.conf
+BTFW=/lib/firmware/bt_bcm/BCM4343A1_001.002.009.1026.1055.hcd
+
+on() { [ -e "$S/$1/enabled" ]; }
+
+wait_for() {
+	for i in $(seq 1 ${2:-50}); do [ -e "$1" ] && return 0; sleep 0.2; done
+	return 1
+}
+
+insmod_dhd() { (cd /lib/modules/4.4.94/fiio && sh ./bcmdhd.sh) 2>/dev/null; }
+
+driver() {
+	if ! grep -q '^bcmdhd ' /proc/modules; then
+		insmod_dhd || { sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory; insmod_dhd; } || return 1
+	fi
+	wait_for /sys/class/net/wlan0
+}
+
+hostname_from_mac() {
+	[ -s $S/hostname ] && return
+	m=$(tr -d ':\n' < /sys/class/net/wlan0/address)
+	[ ${#m} = 12 ] && [ "$m" != 000000000000 ] || return
+	echo "snowsky-disk-${m#????????}" > $S/hostname
+	hostname "$(cat $S/hostname)"
+}
+
+wifi_start() {
+	rfkill unblock wifi
+	[ -s $WCONF ] || printf 'ctrl_interface=/run/wpa_supplicant\nupdate_config=1\n' > $WCONF
+	ip link set wlan0 up
+	iw dev wlan0 set power_save on
+	hostname_from_mac
+	wpa_supplicant -B -s -i wlan0 -c $WCONF -P /run/wpa_supplicant.pid
+	udhcpc -f -S -i wlan0 -x hostname:"$(hostname)" -p /run/udhcpc.wlan0.pid > /dev/null 2>&1 &
+}
+
+wifi_stop() {
+	for p in udhcpc.wlan0 wpa_supplicant; do [ -s /run/$p.pid ] && kill "$(cat /run/$p.pid)" 2>/dev/null; rm -f /run/$p.pid; done
+	killall mdnsd ntpd 2>/dev/null
+	ip addr flush dev wlan0 2>/dev/null
+	ip link set wlan0 down 2>/dev/null
+}
+
+bt_start() {
+	rfkill unblock bluetooth
+	if [ ! -e /sys/class/bluetooth/hci0 ]; then
+		brcm_patchram_plus --enable_hci --no2bytes --tosleep 200000 --baudrate 3000000 --patchram $BTFW /dev/ttyS0 > /run/patchram.log 2>&1 &
+		echo $! > /run/patchram.pid
+		wait_for /sys/class/bluetooth/hci0 75 || return 1
+	fi
+	(while on bluetooth; do bluealsa -S -p a2dp-source --a2dp-volume --initial-volume=40 --keep-alive=5 --io-rt-priority=40; sleep 2; done) > /dev/null 2>&1 &
+	echo $! > /run/bluealsa-loop.pid
+	for i in $(seq 1 50); do timeout 2 bluetoothctl show 2>/dev/null | grep -q 'Powered: yes' && break; sleep 0.2; done
+	for m in $(timeout 3 bluetoothctl devices Bonded 2>/dev/null | cut -d' ' -f2); do
+		timeout 3 bluetoothctl info "$m" | grep -q 'Audio Sink' && timeout 15 bluetoothctl connect "$m" > /dev/null 2>&1 && break
+	done
+}
+
+bt_stop() {
+	for p in bluealsa-loop; do [ -s /run/$p.pid ] && kill "$(cat /run/$p.pid)" 2>/dev/null; rm -f /run/$p.pid; done
+	killall bluealsa 2>/dev/null
+	[ -s /run/patchram.pid ] && kill "$(cat /run/patchram.pid)" 2>/dev/null
+	rm -f /run/patchram.pid
+	rfkill block bluetooth
+}
+
+start() {
+	driver || { logger -t radio "bcmdhd failed to load"; return 1; }
+	if on wifi; then wifi_start; else ip link set wlan0 down; fi
+	on bluetooth && bt_start
+	return 0
+}
+
+stop() {
+	bt_stop
+	wifi_stop
+}
+
+case "$1" in
+start) (start) > /dev/null 2>&1 & ;;
+start-fg) start ;;
+stop) stop ;;
+restart) stop; start ;;
+*) echo "Usage: $0 {start|stop|restart}" >&2; exit 1 ;;
+esac

@@ -1,0 +1,37 @@
+#!/bin/sh
+# Manage the player's Wi-Fi over the USB shell. The WPA key is derived here; the password never leaves this machine.
+# Usage: disc-wifi add SSID [PASSWORD] | remove SSID | list | status | on | off   (add prompts when PASSWORD is omitted)
+set -e
+cd "$(dirname "$0")/.."
+hex() { printf %s "$1" | od -An -tx1 | tr -d ' \n'; }
+W=/usr/libexec/discfw/wifi
+case "${1:-}" in
+add)
+	ssid=${2:?usage: disc-wifi add SSID [PASSWORD]}
+	pass=${3-}
+	if [ $# -lt 3 ]; then
+		printf 'Password for "%s" (empty for an open network): ' "$ssid" >&2
+		stty -echo 2>/dev/null || true
+		read -r pass
+		stty echo 2>/dev/null || true
+		echo >&2
+	fi
+	if [ -n "$pass" ]; then
+		[ ${#pass} -ge 8 ] && [ ${#pass} -le 63 ] || { echo "WPA passwords are 8-63 characters" >&2; exit 2; }
+		key="psk=$(printf %s "$pass" | python3 -I -c 'import hashlib, sys; print(hashlib.pbkdf2_hmac("sha1", sys.stdin.buffer.read(), sys.argv[1].encode(), 4096, 32).hex())' "$ssid")"
+	else
+		key="key_mgmt=NONE"
+	fi
+	DISC_TIMEOUT=60 scripts/disc-sh "$W add $(hex "$ssid") $key && sleep 8 && $W status"
+	;;
+remove)
+	scripts/disc-sh "$W remove $(hex "${2:?usage: disc-wifi remove SSID}")"
+	;;
+list | status | on | off)
+	DISC_TIMEOUT=60 scripts/disc-sh "$W $1"
+	;;
+*)
+	sed -n 3p "$0" >&2
+	exit 2
+	;;
+esac

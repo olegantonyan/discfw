@@ -1,0 +1,4 @@
+#!/bin/sh
+[ "$1" = start ] || exit 0
+fbsplash -s /usr/share/discfw/splash.ppm -d /dev/fb0
+echo 30 > /sys/class/backlight/backlight/brightness

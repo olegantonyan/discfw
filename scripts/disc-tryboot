@@ -1,0 +1,14 @@
+#!/bin/sh
+# Boot a built rootfs once, from RAM, without flashing: store it in /usr/data/discfw/boot, arm the one-shot flag
+# (linuxrc consumes it), reboot. The boot after that uses the NAND image again. Usage: disc-tryboot [IMAGE] [--no-reboot]
+set -e
+cd "$(dirname "$0")/.."
+img=${1:-output/images/rootfs.squashfs}
+B=/usr/data/discfw/boot
+scripts/disc-sh "grep -q ' /usr/data ubifs' /proc/mounts && mkdir -p $B && rm -f $B/try && echo ready" | grep -q '^ready' || { echo "no persistent /usr/data on the player" >&2; exit 1; }
+scripts/disc-sh --push "$img" $B/rootfs.sqfs | tail -1
+scripts/disc-sh "touch $B/try && sync && echo armed" | sed -n 2p
+[ "${2:-}" = --no-reboot ] && exit 0
+scripts/disc-sh --push output/target/usr/sbin/discreset /tmp/discreset | tail -1
+scripts/disc-sh "chmod +x /tmp/discreset; setsid sh -c '/etc/init.d/rcK > /dev/null 2>&1; sync; /tmp/discreset' < /dev/null > /dev/null 2>&1 & echo fired" | grep -q fired
+echo "rebooting into the trial image"

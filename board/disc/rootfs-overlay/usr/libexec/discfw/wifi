@@ -1,0 +1,59 @@
+#!/bin/sh
+# Wi-Fi networks (SSIDs stored as hex). Usage: wifi add SSIDHEX psk=HEX|key_mgmt=NONE | remove SSIDHEX | list | status | on | off
+S=/usr/data/discfw/wifi
+C=$S/wpa_supplicant.conf
+[ -s $C ] || printf 'ctrl_interface=/run/wpa_supplicant\nupdate_config=1\n' > $C
+
+drop() {
+	awk -v h="ssid=$1" '
+		/^network=\{/ { b = $0 "\n"; inb = 1; keep = 1; next }
+		inb { b = b $0 "\n"; if ($1 == h) keep = 0; if ($0 ~ /^\}/) { if (keep) printf "%s", b; inb = 0 }; next }
+		{ print }' $C > $C.new && mv $C.new $C
+}
+
+apply() {
+	if [ -e $S/enabled ] && [ -S /run/wpa_supplicant/wlan0 ]; then
+		wpa_cli -i wlan0 reconfigure > /dev/null
+	else
+		/etc/init.d/S35radio stop
+		/etc/init.d/S35radio start-fg
+	fi
+}
+
+unhex() { printf "$(echo "$1" | sed 's/../\\x&/g')"; }
+
+case "$1" in
+add)
+	drop "$2"
+	printf 'network={\n\tssid=%s\n\t%s\n}\n' "$2" "$3" >> $C
+	touch $S/enabled
+	apply
+	;;
+remove)
+	drop "$2"
+	apply
+	;;
+list)
+	sed -n 's/^\tssid=//p' $C | while read -r h; do unhex "$h"; echo; done
+	;;
+status)
+	[ -e $S/enabled ] && echo "enabled" || echo "disabled"
+	echo "hostname: $(hostname)"
+	ip -4 -o addr show wlan0 2>/dev/null | awk '{ print "ip: " $4 }'
+	wpa_cli -i wlan0 status 2>/dev/null | grep -E '^(ssid|wpa_state|ip_address|address)='
+	iw dev wlan0 link 2>/dev/null | grep -E 'signal|tx bitrate'
+	;;
+on)
+	touch $S/enabled
+	apply
+	;;
+off)
+	rm -f $S/enabled
+	/etc/init.d/S35radio stop
+	/etc/init.d/S35radio start-fg
+	;;
+*)
+	echo "usage: wifi add SSIDHEX psk=HEX|key_mgmt=NONE | remove SSIDHEX | list | status | on | off" >&2
+	exit 2
+	;;
+esac

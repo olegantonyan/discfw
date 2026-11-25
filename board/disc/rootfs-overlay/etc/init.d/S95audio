@@ -1,0 +1,14 @@
+#!/bin/sh
+# I2S3 (CS43131 pair) takes DMA3 (hw:0,3): LO3_MUX <- LI11, as stock mq_player sets it.
+# Shutdown: pause (position kept), let MPD write its state, power the DAC down.
+case "$1" in
+start)
+	amixer -q -c 0 cset name=LO3_MUX LI11
+	;;
+stop)
+	timeout 3 mpc -q -h /run/mpd.sock pause 2>/dev/null
+	killall mpd 2>/dev/null
+	for i in $(seq 1 30); do pidof mpd > /dev/null || break; sleep 0.1; done
+	timeout 3 discctl off >/dev/null 2>&1
+	;;
+esac

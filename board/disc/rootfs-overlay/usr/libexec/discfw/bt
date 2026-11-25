@@ -1,0 +1,60 @@
+#!/bin/sh
+# Bluetooth audio sinks. Usage: bt scan [SECS] | pair MAC | connect MAC | disconnect [MAC] | forget MAC | list | status | on | off
+S=/usr/data/discfw/bluetooth
+B="bluetoothctl"
+
+restart() {
+	/etc/init.d/S35radio stop
+	/etc/init.d/S35radio start-fg
+}
+
+ready() {
+	for i in $(seq 1 50); do $B show 2>/dev/null | grep -q 'Powered: yes' && return 0; sleep 0.2; done
+	echo "bluetooth controller not ready" >&2
+	return 1
+}
+
+case "$1" in
+on)
+	touch $S/enabled
+	restart
+	ready
+	;;
+off)
+	rm -f $S/enabled
+	restart
+	;;
+scan)
+	ready || exit 1
+	$B --timeout "${2:-10}" scan bredr > /dev/null
+	for m in $($B devices | cut -d' ' -f2); do $B info "$m" | grep -q 'Icon: audio' && $B devices | grep "$m"; done
+	;;
+pair)
+	ready || exit 1
+	$B info "$2" 2>/dev/null | grep -q 'Bonded: yes' && exec $B connect "$2"
+	$B remove "$2" > /dev/null 2>&1
+	$B pairable on > /dev/null
+	$B --timeout 12 scan bredr > /dev/null
+	$B --agent NoInputNoOutput pair "$2" && $B trust "$2" && $B connect "$2"
+	$B info "$2" | grep -E 'Paired|Bonded|Connected'
+	;;
+connect | disconnect)
+	$B "$1" $2
+	;;
+forget)
+	$B remove "$2"
+	;;
+list)
+	$B devices Paired
+	;;
+status)
+	[ -e $S/enabled ] && echo "enabled" || echo "disabled"
+	$B show 2>/dev/null | grep -E 'Controller|Name:|Powered:'
+	$B devices Connected
+	bluealsa-cli list-pcms 2>/dev/null
+	;;
+*)
+	echo "usage: bt scan [SECS] | pair MAC | connect MAC | disconnect [MAC] | forget MAC | list | status | on | off" >&2
+	exit 2
+	;;
+esac

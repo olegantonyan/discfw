@@ -1,0 +1,18 @@
+#!/bin/sh
+# Keep MPD on the "BT" output while a Bluetooth A2DP sink is connected and on "DAC" otherwise; pause when BT goes.
+M="mpc -h /run/mpd.sock"
+want() { bluealsa-cli list-pcms 2>/dev/null | grep -q '/a2dpsrc/sink$' && echo BT || echo DAC; }
+while :; do
+	w=$(want)
+	have=$($M outputs 2>/dev/null | sed -n 's/^Output [0-9]* (\(.*\)) is enabled$/\1/p' | tr '\n' ' ')
+	[ "$have" = "BT " ] && [ "$w" = DAC ] && $M -q pause 2>/dev/null
+	if [ "$have" != "$w " ] && $M -q enable only "$w" 2>/dev/null; then
+		logger -t discbt "output -> $w"
+	fi
+	if pidof bluealsa > /dev/null; then
+		timeout 10 bluealsa-cli monitor 2>/dev/null | head -n 1 > /dev/null
+		sleep 0.5
+	else
+		sleep 5
+	fi
+done

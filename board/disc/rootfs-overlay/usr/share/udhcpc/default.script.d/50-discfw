@@ -1,0 +1,12 @@
+#!/bin/sh
+case "$1" in
+bound|renew)
+	iw dev wlan0 set power_save on
+	killall mdnsd 2>/dev/null
+	mdnsd -s
+	pidof ntpd > /dev/null || ntpd -p pool.ntp.org -S /usr/libexec/discfw/ntp-event
+	;;
+deconfig)
+	killall mdnsd 2>/dev/null
+	;;
+esac

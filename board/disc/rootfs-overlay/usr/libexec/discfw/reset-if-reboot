@@ -1,0 +1,3 @@
+#!/bin/sh
+[ -e /run/discfw-reboot ] && exec /usr/sbin/discreset
+exit 0

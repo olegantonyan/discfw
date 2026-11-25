@@ -1,0 +1,30 @@
+package/mpd: do not require kernel headers >= 5.6
+
+MPD only uses openat2 when <linux/openat2.h> exists (meson has_header check,
+HAVE_OPENAT2), and 0.24.x has no caller of the openat2 wrapper, so it builds
+and runs on older kernels (stock Snowsky Disc kernel is 4.4.94).
+
+--- a/package/mpd/Config.in
++++ b/package/mpd/Config.in
+@@ -7,7 +7,6 @@
+ 	depends on BR2_TOOLCHAIN_HAS_ATOMIC
+ 	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_12 # C++20 recommended
+ 	depends on BR2_HOST_GCC_AT_LEAST_10 # C++20 constinit P4311R2
+-	depends on BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_6 # openat2.h
+ 	select BR2_PACKAGE_FMT
+ 	select BR2_PACKAGE_LIBICONV if !BR2_ENABLE_LOCALE
+ 	help
+@@ -420,11 +419,10 @@
+
+ endif
+
+-comment "mpd needs a toolchain w/ C++, threads, wchar, host-gcc 10, gcc 12, headers 5.6"
++comment "mpd needs a toolchain w/ C++, threads, wchar, host-gcc 10, gcc 12"
+ 	depends on BR2_USE_MMU
+ 	depends on BR2_TOOLCHAIN_HAS_ATOMIC
+ 	depends on !BR2_INSTALL_LIBSTDCPP || !BR2_USE_WCHAR || \
+ 		!BR2_TOOLCHAIN_HAS_THREADS || \
+ 		!BR2_TOOLCHAIN_GCC_AT_LEAST_12 || \
+-		!BR2_HOST_GCC_AT_LEAST_10 || \
+-		!BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_6
++		!BR2_HOST_GCC_AT_LEAST_10

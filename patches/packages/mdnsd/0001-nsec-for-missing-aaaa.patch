@@ -1,0 +1,75 @@
+Answer AAAA queries for the host name with an NSEC record when there is no IPv6 (RFC 6762 6.1).
+Without it, dual-stack resolvers wait ~5 s for the missing AAAA before connecting.
+
+diff -ru a/libmdnsd/1035.h b/libmdnsd/1035.h
+--- a/libmdnsd/1035.h	2023-01-22 20:36:19.000000000 +0100
++++ b/libmdnsd/1035.h	2026-11-25 14:17:54.591435872 +0100
+@@ -72,6 +72,7 @@
+ #define QTYPE_TXT    16
+ #define QTYPE_AAAA   28
+ #define QTYPE_SRV    33
++#define QTYPE_NSEC   47
+ #define QTYPE_ANY    255
+ 
+ struct resource {
+diff -ru a/libmdnsd/mdnsd.c b/libmdnsd/mdnsd.c
+--- a/libmdnsd/mdnsd.c	2023-01-22 20:36:19.000000000 +0100
++++ b/libmdnsd/mdnsd.c	2026-11-25 14:17:54.591563342 +0100
+@@ -880,6 +880,8 @@
+ 
+ 			INFO("Query for %s of type %d ...", m->qd[i].name, m->qd[i].type);
+ 			r = _r_next(d, NULL, m->qd[i].name, m->qd[i].type);
++			if (!r && m->qd[i].type != QTYPE_ANY)
++				r = _r_next(d, NULL, m->qd[i].name, QTYPE_NSEC);
+ 			if (!r)
+ 				continue;
+ 
+diff -ru a/src/conf.c b/src/conf.c
+--- a/src/conf.c	2023-01-22 20:36:19.000000000 +0100
++++ b/src/conf.c	2026-11-25 14:18:14.754663715 +0100
+@@ -131,6 +131,8 @@
+ 	return 0;
+ }
+ 
++static void nsec_a_only(struct iface *iface, const char *name);
++
+ /* Create a new record, or update an existing one */
+ mdns_record_t *record(struct iface *iface, int shared, char *host,
+ 		      const char *name, unsigned short type, unsigned long ttl)
+@@ -219,6 +221,8 @@
+ 	if (!IN6_IS_ADDR_UNSPECIFIED(&ipv6addr)) {
+ 		r = record(iface, 0, NULL, nlocal, QTYPE_AAAA, 120);
+ 		mdnsd_set_ipv6(d, r, ipv6addr);
++	} else if (ipv4addr.s_addr != 0) {
++		nsec_a_only(iface, nlocal);
+ 	}
+ 
+ 	if (srec.cname)
+@@ -329,3 +333,27 @@
+ 	return rc;
+ }
+ 
++/* RFC 6762 6.1: no IPv6 here, so NSEC tells AAAA askers only A exists (else they wait ~5 s). */
++static void nsec_a_only(struct iface *iface, const char *name)
++{
++	unsigned char buf[300];
++	size_t n = 0;
++	const char *p = name;
++
++	while (*p) {
++		const char *dot = strchr(p, '.');
++		size_t len = dot ? (size_t)(dot - p) : strlen(p);
++
++		if (!len || len > 63 || n + len + 1 > sizeof(buf) - 4)
++			return;
++		buf[n++] = len;
++		memcpy(buf + n, p, len);
++		n += len;
++		p += len + (dot ? 1 : 0);
++	}
++	buf[n++] = 0;
++	buf[n++] = 0;
++	buf[n++] = 1;
++	buf[n++] = 0x40;
++	mdnsd_set_raw(iface->mdns, record(iface, 0, NULL, name, QTYPE_NSEC, 120), (char *)buf, n);
++}

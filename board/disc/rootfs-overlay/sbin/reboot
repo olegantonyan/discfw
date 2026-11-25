@@ -1,0 +1,7 @@
+#!/bin/sh
+# The stock kernel's restart path halts this board, so reboot ends with a watchdog reset (see inittab).
+case " $* " in
+*" -f "*) sync; exec /usr/sbin/discreset ;;
+esac
+touch /run/discfw-reboot
+exec /bin/busybox reboot "$@"

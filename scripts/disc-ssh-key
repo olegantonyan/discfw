@@ -1,0 +1,11 @@
+#!/bin/sh
+# Authorize a public key for root SSH/SFTP on the player (password logins are disabled). Usage: disc-ssh-key [PUBKEY_FILE]
+set -e
+cd "$(dirname "$0")/.."
+f=${1:-$(ls ~/.ssh/id_ed25519.pub ~/.ssh/id_ecdsa.pub ~/.ssh/id_rsa.pub 2>/dev/null | head -1)}
+[ -r "$f" ] || { echo "no public key found; pass one" >&2; exit 2; }
+key=$(head -1 "$f")
+case "$key" in ssh-* | ecdsa-*) ;; *) echo "$f does not look like a public key" >&2; exit 2 ;; esac
+A=/usr/data/discfw/ssh/root/authorized_keys
+scripts/disc-sh --push "$f" /tmp/newkey.pub | tail -1
+scripts/disc-sh "k=\$(head -1 /tmp/newkey.pub); grep -qxF \"\$k\" $A 2>/dev/null || echo \"\$k\" >> $A; chmod 600 $A; rm /tmp/newkey.pub; wc -l < $A"

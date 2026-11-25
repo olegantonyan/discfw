@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+HERE=$(CDPATH= cd "$(dirname "$0")" && pwd)
+DISKOS_DIR=${DISKOS_DIR:-$HOME/projects/github/diskOS}
+export DISKOS_DIR
+PY=python3
+[ -x "$DISKOS_DIR/.venv/bin/python" ] && PY="$DISKOS_DIR/.venv/bin/python"
+exec "$PY" "$HERE/disc_flash.py" "$@"

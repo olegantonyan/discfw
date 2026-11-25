@@ -1,0 +1,6 @@
+#!/bin/sh
+# Manage Bluetooth headphones over the USB shell.
+# Usage: disc-bt on | off | scan [SECS] | pair MAC | connect MAC | disconnect [MAC] | forget MAC | list | status
+cd "$(dirname "$0")/.."
+[ $# -ge 1 ] || { sed -n 3p "$0" >&2; exit 2; }
+DISC_TIMEOUT=90 exec scripts/disc-sh "/usr/libexec/discfw/bt $*"

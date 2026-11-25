@@ -1,0 +1,13 @@
+#!/bin/sh
+# Squashfs has no data checksums and a NAND read once came back with a shifted 16-byte burst: the bad page stayed in
+# the page cache and mpd segfaulted on every restart. When segfaults keep coming, drop the cache so code is re-read.
+last=$(dmesg | grep -c 'sending SIG')
+while sleep 10; do
+	now=$(dmesg | grep -c 'sending SIG')
+	if [ $((now - last)) -ge 3 ]; then
+		logger -t guard "$((now - last)) crashes in 10 s; dropping page cache"
+		sync
+		echo 3 > /proc/sys/vm/drop_caches
+	fi
+	last=$now
+done

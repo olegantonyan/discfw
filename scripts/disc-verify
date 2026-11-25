@@ -1,0 +1,23 @@
+#!/bin/sh
+# Check the NAND rootfs end to end: read mtd2 back through the kernel and compare every 128 KiB block with the image.
+# NODROP=1 checks what is already cached (e.g. corruption picked up during boot). Usage: disc-verify [96M IMAGE] [SQUASHFS]
+set -e
+cd "$(dirname "$0")/.."
+img=${1:-output/images/disc-rootfs-96M.bin}
+n=$((($(stat -c %s "${2:-output/images/rootfs.squashfs}") + 131071) / 131072))
+want=$(mktemp)
+got=$(mktemp)
+trap 'rm -f "$want" "$got"' EXIT
+python3 -I - "$img" "$n" > "$want" <<'EOF'
+import hashlib, sys
+f = open(sys.argv[1], "rb")
+for i in range(int(sys.argv[2])):
+    print(i, hashlib.md5(f.read(131072)).hexdigest())
+EOF
+DISC_TIMEOUT=180 scripts/disc-sh "${NODROP:+: }sync; ${NODROP:+: }echo 3 > /proc/sys/vm/drop_caches; i=0; while [ \$i -lt $n ]; do echo \$i \$(dd if=/dev/mtdblock_bbt_ro2 bs=131072 skip=\$i count=1 2>/dev/null | md5sum | cut -d' ' -f1); i=\$((i + 1)); done" | grep -E '^[0-9]+ [0-9a-f]{32}$' > "$got"
+bad=$(diff "$want" "$got" | sed -n 's/^< \([0-9]*\) .*/\1/p' | tr '\n' ' ')
+if [ -n "$bad" ] || [ "$(wc -l < "$got")" != "$n" ]; then
+	echo "NAND rootfs DIFFERS from $img in block(s): ${bad:-read incomplete}" >&2
+	exit 1
+fi
+echo "NAND rootfs matches $img ($n blocks)"

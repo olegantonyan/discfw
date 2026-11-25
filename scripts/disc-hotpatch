@@ -1,0 +1,14 @@
+#!/bin/sh
+# Swap built files (paths under output/target) into the running player via RAM-only bind mounts.
+set -e
+cd "$(dirname "$0")/.."
+for f in "$@"; do
+	f=${f#/}
+	src=output/target/$f
+	[ -f "$src" ] || { echo "no $src" >&2; exit 1; }
+	tag=$(sha256sum "$src" | cut -c1-12)
+	dst=/tmp/hot/$(echo "$f" | tr / _).$tag
+	scripts/disc-sh 'mkdir -p /tmp/hot' >/dev/null
+	scripts/disc-sh --push "$src" "$dst" | tail -1
+	scripts/disc-sh "chmod --reference=/$f $dst 2>/dev/null || chmod 755 $dst; while grep -q \" /$f \" /proc/mounts; do umount -l /$f || break; done; mount --bind $dst /$f && sha256sum /$f" | sed -n 2p
+done

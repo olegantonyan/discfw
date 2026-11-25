@@ -1,0 +1,99 @@
+From: discfw
+Subject: [PATCH] alsa: reopen the PCM instead of snd_pcm_prepare() after a stop
+
+The Ingenic X2000 AS DMA driver (4.4) reports a stale DMA pointer after
+stop/prepare/start on one open PCM (its position is reset only at open), so
+restarting after snd_pcm_drop() or an xrun can underrun forever. Reopening
+gives the driver a fresh runtime.
+---
+--- a/src/output/plugins/AlsaOutputPlugin.cxx
++++ b/src/output/plugins/AlsaOutputPlugin.cxx
+@@ -202,6 +202,8 @@
+ 	 */
+ 	bool must_prepare;
+ 
++	AudioFormat reopen_format;
++
+ 	/**
+ 	 * Has snd_pcm_writei() been called successfully at least once
+ 	 * since the PCM was prepared?
+@@ -345,6 +347,9 @@
+ 
+ 	int Recover(int err) noexcept;
+ 
++	/* the Ingenic AS DMA driver keeps a stale DMA pointer across stop/start on one open PCM */
++	void Reopen();
++
+ 	/**
+ 	 * Drain all buffers.  To be run in #EventLoop's thread.
+ 	 *
+@@ -831,6 +836,7 @@
+ 	}
+ 
+ 	snd_pcm_nonblock(pcm, 1);
++	reopen_format = audio_format;
+ 
+ #ifdef ENABLE_DSD
+ 	use_dsd = audio_format.format == SampleFormat::DSD;
+@@ -916,7 +922,13 @@
+ 	case SND_PCM_STATE_XRUN:
+ 		period_buffer.Rewind();
+ 		written = false;
+-		err = snd_pcm_prepare(pcm);
++		try {
++			Reopen();
++			err = 0;
++		} catch (...) {
++			LogError(std::current_exception());
++			err = -EIO;
++		}
+ 		break;
+ 
+ 	case SND_PCM_STATE_OPEN:
+@@ -1161,8 +1173,34 @@
+ 
+ 	period_buffer.Free();
+ 	ring_buffer = {};
+-	snd_pcm_close(pcm);
++	if (pcm != nullptr)
++		snd_pcm_close(pcm);
++	pcm = nullptr;
+ 	delete[] silence;
++	silence = nullptr;
++}
++
++void
++AlsaOutput::Reopen()
++{
++	UnregisterSockets();
++	if (pcm != nullptr)
++		snd_pcm_close(pcm);
++	pcm = nullptr;
++	delete[] silence;
++	silence = nullptr;
++
++	int err = snd_pcm_open(&pcm, GetDevice(), SND_PCM_STREAM_PLAYBACK, mode);
++	if (err < 0) {
++		pcm = nullptr;
++		throw Alsa::MakeError(err, "snd_pcm_open() failed");
++	}
++
++	AudioFormat audio_format = reopen_format;
++	PcmExport::Params params;
++	Setup(audio_format, params);
++	snd_pcm_nonblock(pcm, 1);
++	MultiSocketMonitor::InvalidateSockets();
+ }
+ 
+ size_t
+@@ -1258,9 +1296,7 @@
+ 		must_prepare = false;
+ 		written = false;
+ 
+-		int err = snd_pcm_prepare(pcm);
+-		if (err < 0)
+-			throw Alsa::MakeError(err, "snd_pcm_prepare() failed");
++		Reopen();
+ 	}
+ 
+ 	{

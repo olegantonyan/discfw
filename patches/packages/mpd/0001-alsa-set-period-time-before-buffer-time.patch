@@ -1,0 +1,47 @@
+From: discfw
+Subject: [PATCH] alsa: set period time before buffer time
+
+Some drivers (Ingenic X2000 AS DMA) step buffer sizes, so
+snd_pcm_hw_params_set_buffer_time_near() fails with EINVAL at 44.1 kHz.
+Fixing the period first, as aplay does, lets alsa-lib find a valid buffer.
+---
+--- a/src/lib/alsa/HwSetup.cxx
++++ b/src/lib/alsa/HwSetup.cxx
+@@ -234,18 +234,6 @@
+ 		 period_size_min, period_size_max,
+ 		 period_time_min, period_time_max);
+ 
+-	if (buffer_time > 0) {
+-		err = snd_pcm_hw_params_set_buffer_time_near(pcm, hwparams,
+-							     &buffer_time, nullptr);
+-		if (err < 0)
+-			throw Alsa::MakeError(err, "snd_pcm_hw_params_set_buffer_time_near() failed");
+-	} else {
+-		err = snd_pcm_hw_params_get_buffer_time(hwparams, &buffer_time,
+-							nullptr);
+-		if (err < 0)
+-			buffer_time = 0;
+-	}
+-
+ 	if (period_time_ro == 0 && buffer_time >= 10000) {
+ 		period_time_ro = period_time = buffer_time / 4;
+ 
+@@ -262,6 +250,18 @@
+ 			throw Alsa::MakeError(err, "snd_pcm_hw_params_set_period_time_near() failed");
+ 	}
+ 
++	if (buffer_time > 0) {
++		err = snd_pcm_hw_params_set_buffer_time_near(pcm, hwparams,
++							     &buffer_time, nullptr);
++		if (err < 0)
++			throw Alsa::MakeError(err, "snd_pcm_hw_params_set_buffer_time_near() failed");
++	} else {
++		err = snd_pcm_hw_params_get_buffer_time(hwparams, &buffer_time,
++							nullptr);
++		if (err < 0)
++			buffer_time = 0;
++	}
++
+ 	err = snd_pcm_hw_params(pcm, hwparams);
+ 	if (err < 0)
+ 		throw Alsa::MakeError(err, "snd_pcm_hw_params() failed");

@@ -1,0 +1,14 @@
+config BR2_PACKAGE_DISC_STOCK_BLOBS
+	bool "disc-stock-blobs"
+	help
+	  Stock FiiO V2.57 kernel (xImage) and its GPL kernel modules,
+	  extracted from FiiO's official OTA zip. The kernel is not
+	  flashed; modules are installed to /lib/modules/4.4.94/fiio.
+
+if BR2_PACKAGE_DISC_STOCK_BLOBS
+
+config BR2_PACKAGE_DISC_STOCK_BLOBS_OTA
+	string "FiiO OTA zip"
+	default "$(BR2_EXTERNAL_DISC_PATH)/../research/firmware/SNOWSKY_DISC_update_20260909_v257.zip"
+
+endif

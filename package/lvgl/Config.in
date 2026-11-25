@@ -1,0 +1,8 @@
+config BR2_PACKAGE_LVGL
+	bool "lvgl"
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	help
+	  LVGL graphics library, static, configured for Linux fbdev
+	  and evdev (board lv_conf.h).
+
+	  https://lvgl.io
