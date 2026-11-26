@@ -1,0 +1,18 @@
+From: discfw
+Subject: [PATCH] Wait with pause() instead of sleep(UINT_MAX)
+
+With a 32-bit time_t, sleep(UINT_MAX) overflows, nanosleep fails at once and the
+loop that keeps the HCI line discipline open spins at 100% CPU.
+
+---
+--- a/src/main.c	2026-11-26 22:09:05.160495058 +0100
++++ b/src/main.c	2026-11-26 22:09:05.173650238 +0100
+@@ -976,7 +976,7 @@
+ 		proc_enable_hci();
+ 
+ 		while (1) {
+-			sleep(UINT_MAX);
++			pause();
+ 		}
+ 	}
+ 

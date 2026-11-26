@@ -3,5 +3,10 @@ config BR2_PACKAGE_DISCUI
 	depends on BR2_TOOLCHAIN_HAS_THREADS
 	select BR2_PACKAGE_LVGL
 	select BR2_PACKAGE_LIBMPDCLIENT
+	select BR2_PACKAGE_LIBDISC
+	select BR2_PACKAGE_JPEG
+	select BR2_PACKAGE_LIBPNG
+	select BR2_PACKAGE_ZLIB
 	help
-	  Folder browser and now-playing UI (LVGL, MPD client).
+	  Player UI (LVGL, MPD client): folders, playlists, library,
+	  now playing, settings, lock screen.

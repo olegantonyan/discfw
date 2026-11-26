@@ -1,0 +1,44 @@
+#!/bin/sh
+# Build discfw components for the host into output/host-discfw: unit tests, discsys --fake-hw, headless discui.
+# Usage: scripts/host-build [test|discsys|discui|all]
+set -e
+TOP=$(cd "$(dirname "$0")/.." && pwd)
+O=$TOP/output/host-discfw
+LV_VER=9.6.0
+J=-j$(nproc)
+mkdir -p "$O"
+rsync -a --delete --exclude compile_flags.txt --filter='P discd/discd' --filter='P discd/discctl' --filter='P discsys/discsys' --filter='P discsys/discfw' --filter='P discui/discui' "$TOP/src/" "$O/src/"
+EXTRA="EXTRA_CFLAGS=-I$O/src/common/include -g -O0 -fsanitize=address,undefined"
+LDX="EXTRA_LDFLAGS=-L$O/src/common -fsanitize=address,undefined"
+make -s -C "$O/src/common" $J CFLAGS="-g -O1" all test
+
+lvgl() {
+	[ "$O/lvgl/.conf" -nt "$TOP/package/lvgl/lv_conf.h" ] && [ -f "$O/lvgl/lib/liblvgl.a" ] && return
+	rm -rf "$O/lvgl-src" "$O/lvgl-build" "$O/lvgl"
+	mkdir -p "$O/lvgl-src"
+	tar -xzf "$TOP/dl/lvgl/lvgl-$LV_VER.tar.gz" -C "$O/lvgl-src" --strip-components=1
+	cmake -S "$O/lvgl-src" -B "$O/lvgl-build" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="$O/lvgl" -DCMAKE_INSTALL_LIBDIR=lib \
+		-DLV_BUILD_CONF_PATH="$TOP/package/lvgl/lv_conf.h" -DLV_BUILD_INSTALL=ON -DLV_FETCH_DEPENDENCIES=OFF \
+		-DCONFIG_LV_BUILD_EXAMPLES=OFF -DCONFIG_LV_BUILD_DEMOS=OFF -DCONFIG_LV_USE_THORVG=OFF \
+		-DCONFIG_LV_USE_THORVG_INTERNAL=OFF -DBUILD_SHARED_LIBS=OFF > "$O/lvgl-cmake.log"
+	cmake --build "$O/lvgl-build" > "$O/lvgl-build.log"
+	cmake --install "$O/lvgl-build" > /dev/null
+	touch "$O/lvgl/.conf"
+}
+
+discui() {
+	lvgl
+	make -s -C "$O/src/discui" $J host "$EXTRA" "$LDX" HOST_LVGL="$O/lvgl" LV_CONF_DIR="$TOP/package/lvgl"
+}
+
+case "${1:-all}" in
+test) ;;
+discsys) make -s -B -C "$O/src/discsys" $J "$EXTRA" "$LDX" ;;
+discui) discui ;;
+all)
+	make -s -B -C "$O/src/discd" $J "$EXTRA" "$LDX" discd discctl
+	make -s -B -C "$O/src/discsys" $J "$EXTRA" "$LDX"
+	discui
+	;;
+esac
+echo "built in $O/src"

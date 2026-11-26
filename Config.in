@@ -1,6 +1,8 @@
 menu "Snowsky Disc"
 source "$BR2_EXTERNAL_DISC_PATH/package/disc-stock-blobs/Config.in"
 source "$BR2_EXTERNAL_DISC_PATH/package/lvgl/Config.in"
+source "$BR2_EXTERNAL_DISC_PATH/package/libdisc/Config.in"
 source "$BR2_EXTERNAL_DISC_PATH/package/discd/Config.in"
+source "$BR2_EXTERNAL_DISC_PATH/package/discsys/Config.in"
 source "$BR2_EXTERNAL_DISC_PATH/package/discui/Config.in"
 endmenu

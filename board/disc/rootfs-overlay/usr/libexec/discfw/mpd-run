@@ -1,0 +1,73 @@
+#!/bin/sh
+# Writes /run/mpd.conf from discfw settings and runs MPD in the foreground (inittab respawns it). Waits while
+# /run/mpd.hold exists (USB storage, library reset); moves a database aside that crashed MPD 3 times in a minute.
+S=/usr/data/discfw
+DB=$S/mpd/database
+H=/run/mpd.hold
+C=/run/mpd.conf
+L=/run/mpd.crashes
+
+while [ -e $H ]; do sleep 1; done
+now=$(cut -d. -f1 /proc/uptime)
+recent=$(awk -v n="$now" 'n - $1 < 60' $L 2>/dev/null | wc -l)
+if [ "$recent" -ge 3 ] && [ -e $DB ]; then
+	logger -t mpd-run "MPD keeps crashing, moving the database aside"
+	mv -f $DB $DB.bad
+	: > $L
+fi
+echo "$now" >> $L
+
+cfg() { discfw cfg "$1"; }
+pw=$(cfg net.mpd_password)
+rg=$(cfg play.replaygain)
+
+{
+	cat <<CONF
+pid_file "/run/mpd.pid"
+state_file "$S/mpd/state"
+restore_paused "yes"
+playlist_directory "$S/mpd/playlists"
+music_directory "/media/sd"
+database {
+	plugin "simple"
+	path "$DB"
+	compress "no"
+}
+auto_update "no"
+metadata_to_use "artist,albumartist,album,title,track,disc,genre,date,composer,performer,name,comment"
+log_file "syslog"
+bind_to_address "/run/mpd.sock"
+replaygain "$rg"
+volume_normalization "no"
+max_connections "16"
+local_permissions "read,add,control,admin"
+CONF
+	if [ "$(cfg net.mpd)" = 1 ]; then
+		echo 'bind_to_address "any"'
+		echo 'port "6600"'
+	fi
+	if [ -n "$pw" ]; then
+		echo "password \"$pw@read,add,control,admin\""
+		echo 'default_permissions ""'
+	fi
+	cat <<CONF
+audio_output {
+	type "alsa"
+	name "DAC"
+	device "disc"
+	format "*:32:2"
+	allowed_formats "44100:32:2 32000:32:2 48000:32:2 88200:32:2 96000:32:2 176400:32:2 192000:32:2 352800:32:2 384000:32:2"
+	mixer_type "null"
+	period_time "40000"
+}
+audio_output {
+	type "alsa"
+	name "BT"
+	device "bluealsa"
+	mixer_type "software"
+	enabled "no"
+}
+CONF
+} > $C.new && mv -f $C.new $C
+
+exec /usr/bin/mpd --no-daemon $C

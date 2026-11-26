@@ -1,11 +1,18 @@
 #!/bin/sh
-# Squashfs has no data checksums and a NAND read once came back with a shifted 16-byte burst: the bad page stayed in
-# the page cache and mpd segfaulted on every restart. When segfaults keep coming, drop the cache so code is re-read.
-last=$(dmesg | grep -c 'sending SIG')
+# Squashfs has no data checksums and a NAND read sometimes comes back wrong (seen on the first boot after a flash: a
+# shifted 16-byte burst). The bad page stays in the page cache, so a program then segfaults or fails to exec on every
+# restart. When crashes or squashfs read errors keep coming, drop the cache so the data is read again.
+count() { dmesg | grep -c -e 'sending SIG' -e 'SQUASHFS error'; }
+last=$(count)
+if [ "$last" -gt 0 ]; then
+	logger -t guard "$last crash/squashfs errors since boot; dropping page cache"
+	sync
+	echo 3 > /proc/sys/vm/drop_caches
+fi
 while sleep 10; do
-	now=$(dmesg | grep -c 'sending SIG')
+	now=$(count)
 	if [ $((now - last)) -ge 3 ]; then
-		logger -t guard "$((now - last)) crashes in 10 s; dropping page cache"
+		logger -t guard "$((now - last)) crashes or squashfs errors in 10 s; dropping page cache"
 		sync
 		echo 3 > /proc/sys/vm/drop_caches
 	fi

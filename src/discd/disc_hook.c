@@ -1,4 +1,4 @@
-#include "proto.h"
+#include <disc/conn.h>
 
 #include <alsa/asoundlib.h>
 #include <stdio.h>

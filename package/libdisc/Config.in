@@ -1,0 +1,5 @@
+config BR2_PACKAGE_LIBDISC
+	bool "libdisc"
+	help
+	  Shared discfw code: settings store and schema, line protocol,
+	  key=value encoding, natural sort.

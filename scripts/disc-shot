@@ -1,0 +1,7 @@
+#!/bin/sh
+# Screenshot of the player's screen (discui debug socket) to a local PNG. Usage: disc-shot OUT.png
+set -e
+cd "$(dirname "$0")/.."
+out=${1:?usage: disc-shot OUT.png}
+DISC_TIMEOUT=60 scripts/disc-sh 'discfw ui shot /tmp/shot.png && base64 /tmp/shot.png' | sed -n '/^iVBOR/,/^\[rc=/p' | grep -v '^\[rc=' | base64 -d > "$out"
+file "$out"

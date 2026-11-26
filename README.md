@@ -1,8 +1,9 @@
 # discfw — Snowsky Disc firmware (Buildroot external tree)
 
 Open userland for the FiiO Snowsky Disc, built from source with mainline Buildroot **2026.02.3 LTS** plus small
-patches (`patches/`). v0 boots on the **stock kernel** (mtd1 untouched), replaces only the rootfs (mtd2),
-shows a folder browser and plays music through MPD to the dual CS43131 DAC.
+patches (`patches/`). It boots on the **stock kernel** (mtd1 untouched), replaces only the rootfs (mtd2)
+and runs a full player: MPD to the dual CS43131 DAC (or Bluetooth), an LVGL UI with folders, playlists, library,
+now playing, lock screen and on-screen settings, and a system daemon for keys, screen, power and policy.
 
 ## Build
 
@@ -65,16 +66,26 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
   `remove SSID | list | status | on | off`. Hostname `snowsky-disk-XXXX` (last 4 hex of the Wi-Fi MAC), announced by
   `mdnsd` as `snowsky-disk-XXXX.local` with `_ssh`, `_sftp-ssh`, `_mpd` services; NTP after each DHCP lease.
 - SSH/SFTP (dropbear + gesftpserver), keys only: `scripts/disc-ssh-key [PUBKEY]`.
-- MPD on TCP 6600 (LAN, no password) as well as `/run/mpd.sock`; resumes paused at the saved position after reboot.
+- MPD on TCP 6600 (setting `net.mpd`, optional password `net.mpd_password`) as well as `/run/mpd.sock`;
+  `mpd-run` writes `/run/mpd.conf` from settings at every start. Library: `music_directory /media/sd`, database
+  `mpd/database` on the data partition; scans run at MPD's idle priority, by policy `lib.scan` (when the card's
+  CID changes, every mount, or manual) and never while the card is unmounted. `library reset` drops the database.
+- Settings: `/usr/data/discfw/settings` (`key=value`, only non-defaults). Schema with ranges and choices:
+  `src/common/settings_schema.c`. `discfw list [prefix]`, `discfw get|set|reset KEY`, `discfw cfg KEY` (reads the
+  file without the daemon). Changes apply at once (discd reloads, MPD restarts for network keys, radios restart).
 - Bluetooth headphones: `scripts/disc-bt on | scan | pair MAC | connect MAC | forget MAC | list | status | off`.
   bluez-alsa A2DP source (SBC, aptX, aptX HD); `discbt` moves MPD to the `BT` output while a sink is connected and
   pauses when it disconnects (nothing leaks out of the jack); bonded headphones reconnect by themselves. Verified
   2026-11-25 with UGREEN Studio Pro (SBC). Headphone buttons (AVRCP) do not control playback yet: no `uinput`.
-- DAC: `discctl status | rate <hz> | mute | unmute | release | vol <0..255>|+|- | off` (attenuation in 0.5 dB;
-  default 0x50 = −40 dB, kept in `/run/discd.vol`). `release` = mute in 500 ms unless a new stream unmutes first.
-- Battery: `discctl battery` (`cap mv ma temp limit state`; state `battery | charging | full | held | idle`),
-  `discctl limit 100|80|60` (any 50–100). UI: indicator on top of every screen (bolt = charging, USB = powered, not
-  charging); **Settings** (first entry of the SD root) shows details and the charge limit.
+- DAC: `discctl status | rate <hz> | mute | unmute | release | vol <0..255>|+|- | volpct <0..100> | off | reload |
+  watch` (attenuation in 0.5 dB). Volume is MPD's (null mixer, so any MPD client controls it); discsys maps it to
+  `volpct` with `audio.dac_range` dB of range and `audio.vol_max`, and remembers it per output and per BT device.
+  `audio.balance`, `audio.filter` and `audio.dre` use the stock driver's ioctls (applied only once changed from
+  default). `release` = mute in 500 ms unless a new stream unmutes first.
+- Battery: `discctl battery` (`cap mv ma temp limit state vbus stage cycles health typec ichg`; state
+  `battery | charging | full | held | hot | idle`). Charging is set by `battery.limit` (50–100), `battery.resume_drop`,
+  `battery.current` (1.3 A / 0.6 A) and `battery.temp_max`. Low battery: warning at `power.lowbat_warn`, 30 s
+  countdown then power-off at `power.lowbat_off` % or below `power.lowbat_mv`.
 - MPD: `mpc -h /run/mpd.sock status`. ALSA: `aplay -D disc`, `speaker-test -D disc -c 2 -r 44100 -F S32_LE`.
 - Logs: `logread` (syslogd 256 KB RAM ring).
 - Tests (`/usr/libexec/discfw-test/`, sources `scripts/device/`): `skipstress.sh` (random next/prev bursts, checks
@@ -83,8 +94,29 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
   `loadtest.sh FILE` (playback under 2-core CPU + SD + memory load), `radiotest.sh` (Wi-Fi + BT bring-up as stock), `msctest.sh` (run detached: RAM-disk mass storage next to ACM, then
   reverts). `scripts/device/unsafe/uactest.sh` is not installed: tearing down an ACM+UAC2 composite after streaming
   took the stock kernel's USB gadget down for good (needs a power cycle).
-- Keys: play = play/pause; vol± = volume; double vol+/double play = next; double vol− = previous; power short =
-  screen off/on; power long (~3 s) = clean poweroff.
+- Keys (discsys): every key × press/double/hold × screen on/off is a setting `keys.<key>.<press>.<on|off>`
+  (`discfw list keys.`); timings `keys.double_ms`, `keys.long_ms`, `keys.repeat_ms`. discsys learns at run time
+  whether `x2000_key` delivers real press/release (then it times presses itself) or only its own short/long/double
+  codes (then those are used). Power hold (`keys.power_long_ms`, 1.5–4 s) always powers off, after release.
+  Defaults: play = play/pause, double = next, hold = previous; vol± = volume (hold repeats), double vol+/− =
+  next/previous; power = screen off/on.
+- Screen and power (discsys): dim/off timeouts, idle power-off, animations per power profile
+  (`power.battery` / `power.charger` select saver, balanced, performance or custom; `power.<profile>.*`). Standby is
+  a clean power-off; state (queue, position, folder, screen) comes back on boot. Lock screen on wake (`lock.*`).
+  Sleep timer: `discfw sleep MIN` (pause or power-off, `play.sleep_action`).
+- UI (discui): long names scroll by themselves (`ui.marquee`: all, playing item, off); hold a row and drag sideways
+  to scroll its name by hand, hold without dragging for its menu. Home, Folders (letter strip, remembers each folder's position, hold = play / shuffle / queue /
+  create playlist / add to playlist), Now playing (drag the edge ring, or hold the cover and turn it, to seek: one turn = 1 min; cover
+  none/static/rotating/vinyl; ≡ = menu), Queue, Playlists (MPD stored playlists, mpz naming and order, per-playlist play order), Library
+  (artists/albums/genres), Settings (generated from the schema; battery, power profiles, library, timezone,
+  system). Gestures: swipe right from the left edge = back everywhere except the lock screen, also out of menus and dialogs (bulge shows progress), pull down from the top = shade
+  (player, toggles, volume, brightness, shortcuts), swipe up on the lock screen = unlock. Folders not yet in the
+  library play at once through `/run/sdfile` and get scanned in the background. Debug/automation socket
+  `/run/discui.sock`: `state`, `dump [top]`, `tap X Y`, `hold X Y [MS]`, `swipe X1 Y1 X2 Y2 [MS]`, `back`, `home`,
+  `goto SCREEN`, `folder PATH`, `shot PATH` (PNG, round mask).
+- Timezone: `time.zone` (list from `/usr/share/discfw/zones.tsv`), written as a POSIX TZ string to
+  `/usr/data/discfw/TZ` (`/etc/TZ` links there). The clock shows `?` until NTP has synced this boot
+  (`/run/time.synced`); the RTC does not tick on the stock kernel.
 
 ## Design
 
@@ -99,9 +131,18 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
 | Audio | MPD → ALSA `disc` (hooks PCM over `hw:0,3`) → `libdisc_hook.so` → `discd` | Hook sets DAC rate + unmute on `hw_params` (rate read from `/proc/asound/.../hw_params`; the hooks PCM is not set up yet) and sends `release` on `hw_free`/close, so any ALSA client gets correct DAC state and same-rate reopens never touch the DAC. `S95audio` routes DMA3 → I2S3 (`LO3_MUX=LI11`, as stock) and, first thing at shutdown, stops playback and powers the DAC down. MPD: `format "*:32:2"` + DAC rates in `allowed_formats` (unlisted rates resample to 44.1k), `period_time 40000`; two patches for the stock driver (below). |
 | DAC | `discd` holds `/dev/cs43131` + `/dev/cs43131c` (stock driver ioctls), init once | Opening runs the full init; rate change = SRATE A then C (C sleeps 150 ms, powers both). |
 | Charge limit | `discd` every 5 s: gauge sysfs + SGM41513 `REG08` status, toggles only `REG01` CHG_CONFIG over `/dev/i2c-2`; stop at ≥ limit, resume at limit − 5 while plugged | Stock's `0x28`/`0x29` ioctls also force a 2.4 A input limit on any source; one bit leaves the charger's detected limit alone. Unplugged → charging back on, so a dead `discd` never blocks charging. Details: `SYSTEM_CONTROL.md` §4.2. |
-| Supervision | inittab `respawn` for `discd`, `mpd --no-daemon`, `discui` | A crashed daemon restarts alone; `discui` reconnects to MPD. |
-| UI | `discui`, LVGL 9.6 (static), own fbdev flush with 180° rotation, `lv_evdev` touch, raw key reader, libmpdclient | Panel is mounted upside down; DejaVu Sans via tiny_ttf for accented names. |
+| Supervision | inittab `respawn` for `discd`, `discsys`, `mpd-run`, `discui`; discsys pings the UI every 5 s and kills it after 3 missed answers; two UI crashes in 10 s → safe mode | A crashed daemon restarts alone and rebuilds its state from MPD, discd and sysfs. |
+| System policy | `discsys` (GLib): keys, screen power (backlight + `bl_power`, panel/touch sleep), power profiles, low battery, settings store, volume bridge, library scan policy; line protocol on `/run/discsys.sock`, CLI `discfw` | Keys, volume, power-off and screen timeouts keep working while the UI is dead or restarting. |
+| UI | `discui`, LVGL 9.6 (static), own fbdev flush with 180° rotation, own touch reader + gesture layer, poll()-driven loop that sleeps with the screen off, recycled-row lists, cover art in a worker thread (libjpeg-turbo DCT scaling, libpng) | Panel is mounted upside down; DejaVu Sans via tiny_ttf for accented names. |
+| Formats | MPD: FLAC, MP3 (mpg123), Ogg/Opus, WAV/AIFF (sndfile), plus ffmpeg with only aac/alac/ape/wavpack/wma/tta decoders | Stock parity without a full ffmpeg. |
 | USB | configfs gadget, ACM only | Root shell for development. |
+
+## Development on the host
+
+`scripts/host-build [test|discsys|discui|all]` builds into `output/host-discfw` with ASan/UBSan: libdisc unit
+tests, `discsys --fake-hw`, and a headless `discui --host` (in-memory display; drive it through its debug socket,
+screenshots via `shot`). Point them at a host MPD with `DISC_RUN_DIR` (sockets), `DISC_DATA_DIR` (settings and
+state), `DISC_MUSIC_ROOT` and `DISCUI_FONT`. Host LVGL is built from the pinned tarball with the same `lv_conf.h`.
 
 ## Stock kernel quirks (4.4.94) and workarounds
 
@@ -124,8 +165,9 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
 - **Rare NAND read glitch**: on the first cold boot after one flash, a read of rootfs block 37 came back with a
   16-byte burst shifted by one byte. Squashfs has no data checksums, the bad page stayed in the page cache and
   `mpd` segfaulted on every restart; the flash itself was intact (re-read after `drop_caches` matched). Not
-  reproduced in 1.4 GB of re-reads under Wi-Fi/SD load or 8 reboots. Defences: `guard` (inittab) drops the page
-  cache after ≥ 3 crashes in 10 s; `scripts/disc-verify` reads mtd2 back and compares every 128 KiB block with the
+  reproduced in 1.4 GB of re-reads under Wi-Fi/SD load or 8 reboots. Seen again 2026-11-26 on the first boot after
+  a flash (block 119: first read wrong, the next three right; `discsys` failed to exec with EIO). Defences: `guard`
+  (inittab) drops the page cache at start if any crash or SQUASHFS error was logged, and after ≥ 3 more in 10 s; `scripts/disc-verify` reads mtd2 back and compares every 128 KiB block with the
   image (`NODROP=1` checks what boot already cached).
 - **Restart halts**: the kernel's restart path (`reboot(2)`) leaves the board dark and hung. `/sbin/reboot` is a
   wrapper: init runs the normal shutdown, then `/usr/sbin/discreset` issues the stock `soc_watchdog.ko` reset ioctl

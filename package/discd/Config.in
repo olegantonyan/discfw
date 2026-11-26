@@ -1,6 +1,7 @@
 config BR2_PACKAGE_DISCD
 	bool "discd"
 	select BR2_PACKAGE_ALSA_LIB
+	select BR2_PACKAGE_LIBDISC
 	help
 	  CS43131 DAC control daemon, discctl CLI and the ALSA "disc"
 	  hook PCM that sets DAC rate and mute.

@@ -1,7 +1,10 @@
 #pragma once
-#include <stdio.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+struct kvbuf;
 
 void power_init(void);
-void power_tick(void);
-int power_set_limit(int limit);
-void power_status(FILE *out);
+void power_reload(void);
+bool power_tick(void);
+void power_status(struct kvbuf *b, bool full);

@@ -1,0 +1,17 @@
+#!/bin/sh
+# mdev hook for the SD card: mount read-only on insert; on removal pause playback and drop the mount.
+M=/media/sd
+[ -e /run/usb-storage ] && exit 0
+case "$ACTION" in
+add)
+	grep -q " $M " /proc/mounts && exit 0
+	[ "$MDEV" = mmcblk0 ] && [ -e /dev/mmcblk0p1 ] && exit 0
+	mount -o ro,iocharset=utf8 "/dev/$MDEV" $M 2>/dev/null && logger -t sdcard "mounted $MDEV"
+	;;
+remove)
+	grep -q "^/dev/$MDEV $M " /proc/mounts || exit 0
+	timeout 3 mpc -q -h /run/mpd.sock pause 2>/dev/null
+	umount -l $M && logger -t sdcard "removed $MDEV"
+	;;
+esac
+exit 0

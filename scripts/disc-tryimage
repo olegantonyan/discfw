@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 img=${1:-output/images/rootfs.squashfs}
 STOP='for s in S95audio S50dropbear S40bluetoothd S35radio S30dbus-daemon S02klogd S01syslogd; do [ -x /etc/init.d/$s ] && /etc/init.d/$s stop > /dev/null 2>&1; done; killall crond mpd 2>/dev/null; umount /usr/data 2>/dev/null; true'
-START='kill -HUP 1; sleep 1; killall discd discui discbt mpd 2>/dev/null; for s in S01syslogd S02klogd S13data S95audio S30dbus-daemon S35radio S40bluetoothd S50dropbear; do [ -x /etc/init.d/$s ] && /etc/init.d/$s start; done; sleep 2; head -1 /etc/discfw-release; pidof mpd discd discui'
+START='kill -HUP 1; sleep 1; killall discsys discd discui discbt mpd 2>/dev/null; [ -d /usr/data/discfw ] || mount -t ubifs -o sync /dev/ubi1_0 /usr/data; for s in S01syslogd S02klogd S13data S95audio S30dbus-daemon S35radio S40bluetoothd S50dropbear; do [ -x /etc/init.d/$s ] && /etc/init.d/$s start; done; sleep 2; head -1 /etc/discfw-release; pidof mpd discd discsys discui'
 DISC_TIMEOUT=60 scripts/disc-sh "$STOP; for d in var etc usr lib sbin bin; do while grep -q \" /\$d \" /proc/mounts; do umount -l /\$d || break; done; done; umount -l /tmp/new 2>/dev/null; rm -f /tmp/new.sqfs; mkdir -p /tmp/new" > /dev/null
 scripts/disc-sh --push "$img" /tmp/new.sqfs | tail -1
 DISC_TIMEOUT=90 scripts/disc-sh 'mount -t squashfs -o loop,ro /tmp/new.sqfs /tmp/new && for d in bin sbin lib usr etc var; do mount --bind /tmp/new/$d /$d; done' "$START"

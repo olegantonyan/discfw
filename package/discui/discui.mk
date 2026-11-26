@@ -8,9 +8,10 @@ DISCUI_VERSION = 0.1
 DISCUI_SITE = $(BR2_EXTERNAL_DISC_PATH)/src/discui
 DISCUI_SITE_METHOD = local
 DISCUI_LICENSE = GPL-2.0+
-DISCUI_DEPENDENCIES = host-pkgconf lvgl libmpdclient discd
+DISCUI_DEPENDENCIES = host-pkgconf lvgl libmpdclient libdisc jpeg libpng zlib
 
 define DISCUI_BUILD_CMDS
+	$(TARGET_MAKE_ENV) $(MAKE) $(TARGET_CONFIGURE_OPTS) -C $(@D) clean
 	$(TARGET_MAKE_ENV) $(MAKE) $(TARGET_CONFIGURE_OPTS) PKG_CONFIG=$(PKG_CONFIG_HOST_BINARY) -C $(@D)
 endef
 
