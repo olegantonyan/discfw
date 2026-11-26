@@ -38,7 +38,9 @@ scripts/disc-flash stock     # restore stock V2.57 rootfs (diskos-installer rest
 Mask-ROM mode: power the Disc off, hold **Volume-Down**, plug USB (screen stays black). The writer is diskOS's
 (`diskos_installer.flasher.flash`): it writes only mtd2 and first proves on the device that kernel, recovery kernel
 and recovery rootfs are FiiO V2.57, so the same path always restores stock. U-Boot, kernel, recovery, `mac` and
-`/usr/data` are never written; discfw does not mount `/usr/data`, so stock comes back with its data.
+`/usr/data` are never written by the writer; discfw keeps its state in `/usr/data/discfw/` and leaves stock's files
+alone, so stock comes back with its data. Mask-ROM ignores Power while USB is connected; to leave it, unplug USB and
+hold Power ~6 s (the RTC's long-press reset).
 
 **If a build does not boot:** the stock kernel reboots 10 s after a panic. Hold Volume-Down and plug USB while it
 reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unknown, wait 25 minutes before retrying.
@@ -57,7 +59,8 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
 - SD card: `/media/sd`, mounted **read-only** (exFAT/vfat via the stock kernel).
 - Persistent state: `/usr/data/discfw/` on the stock `userdata` UBIFS (mtd7, mounted `sync`; stock files untouched; never
   formatted — if it will not mount, a tmpfs stands in). Holds `wifi/`, `bluetooth/` (BlueZ pairings via
-  `/var/lib/bluetooth`), `ssh/` (host keys, `root/authorized_keys`), `mpd/` (state, playlists), `hostname`, `clock`.
+  `/var/lib/bluetooth`), `ssh/` (host keys, `root/authorized_keys`), `mpd/` (state, playlists), `hostname`, `clock`,
+  `charge_limit`.
 - Wi-Fi: `scripts/disc-wifi add "SSID"` (prompts; derives the WPA key on the host, only the key reaches the player),
   `remove SSID | list | status | on | off`. Hostname `snowsky-disk-XXXX` (last 4 hex of the Wi-Fi MAC), announced by
   `mdnsd` as `snowsky-disk-XXXX.local` with `_ssh`, `_sftp-ssh`, `_mpd` services; NTP after each DHCP lease.
@@ -69,6 +72,9 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
   2026-11-25 with UGREEN Studio Pro (SBC). Headphone buttons (AVRCP) do not control playback yet: no `uinput`.
 - DAC: `discctl status | rate <hz> | mute | unmute | release | vol <0..255>|+|- | off` (attenuation in 0.5 dB;
   default 0x50 = −40 dB, kept in `/run/discd.vol`). `release` = mute in 500 ms unless a new stream unmutes first.
+- Battery: `discctl battery` (`cap mv ma temp limit state`; state `battery | charging | full | held | idle`),
+  `discctl limit 100|80|60` (any 50–100). UI: indicator on top of every screen (bolt = charging, USB = powered, not
+  charging); **Settings** (first entry of the SD root) shows details and the charge limit.
 - MPD: `mpc -h /run/mpd.sock status`. ALSA: `aplay -D disc`, `speaker-test -D disc -c 2 -r 44100 -F S32_LE`.
 - Logs: `logread` (syslogd 256 KB RAM ring).
 - Tests (`/usr/libexec/discfw-test/`, sources `scripts/device/`): `skipstress.sh` (random next/prev bursts, checks
@@ -92,6 +98,7 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
 | Modules | stock `utils soc_utils soc_gpio soc_msc soc_adc` with stock parameters (`/lib/modules/4.4.94/fiio/*.sh`) | SD card + SDIO host, GPIO, ADC. Wi-Fi (`bcmdhd`) not loaded in v0. |
 | Audio | MPD → ALSA `disc` (hooks PCM over `hw:0,3`) → `libdisc_hook.so` → `discd` | Hook sets DAC rate + unmute on `hw_params` (rate read from `/proc/asound/.../hw_params`; the hooks PCM is not set up yet) and sends `release` on `hw_free`/close, so any ALSA client gets correct DAC state and same-rate reopens never touch the DAC. `S95audio` routes DMA3 → I2S3 (`LO3_MUX=LI11`, as stock) and, first thing at shutdown, stops playback and powers the DAC down. MPD: `format "*:32:2"` + DAC rates in `allowed_formats` (unlisted rates resample to 44.1k), `period_time 40000`; two patches for the stock driver (below). |
 | DAC | `discd` holds `/dev/cs43131` + `/dev/cs43131c` (stock driver ioctls), init once | Opening runs the full init; rate change = SRATE A then C (C sleeps 150 ms, powers both). |
+| Charge limit | `discd` every 5 s: gauge sysfs + SGM41513 `REG08` status, toggles only `REG01` CHG_CONFIG over `/dev/i2c-2`; stop at ≥ limit, resume at limit − 5 while plugged | Stock's `0x28`/`0x29` ioctls also force a 2.4 A input limit on any source; one bit leaves the charger's detected limit alone. Unplugged → charging back on, so a dead `discd` never blocks charging. Details: `SYSTEM_CONTROL.md` §4.2. |
 | Supervision | inittab `respawn` for `discd`, `mpd --no-daemon`, `discui` | A crashed daemon restarts alone; `discui` reconnects to MPD. |
 | UI | `discui`, LVGL 9.6 (static), own fbdev flush with 180° rotation, `lv_evdev` touch, raw key reader, libmpdclient | Panel is mounted upside down; DejaVu Sans via tiny_ttf for accented names. |
 | USB | configfs gadget, ACM only | Root shell for development. |
@@ -136,13 +143,16 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
 
 ## Roadmap
 
-1. **Any kernel**: read-only NAND dump stage-2 (fork of diskOS `my_write6.c`) to back up mtd0–mtd7 incl. `mac`;
+1. **Any kernel**: ~~back up mtd0–mtd7 incl. `mac`~~ done 2026-11-25 (`../backup/nand-2026-11-25/`, no OOB);
    tethered RAM boot (usbboot SPL + jump stub + uImage at 0x80F00000, no NAND writes); a writer for mtd1 with a
    stock-kernel restore path; kernel from source (4.4.94 SDK mirror, decompiled board DT; later 5.10/6.6/mainline).
+   Mainline Linux 7.4 was ported 2026-11-25/26 and parked (unreliable NAND boots): branch `kernel-74`,
+   `../research/MAINLINE.md` § Status.
 2. **Parity**: USB storage (configfs `mass_storage`, `lun.0/file=/dev/mmcblk0` after unmount), Wi-Fi + Bluetooth
    services (wpa_supplicant config, bluetoothd, bluez-alsa as a second MPD output), USB DAC mode (configfs `uac2`;
-   FiiO's kernel has the multi-rate `u_audio` backport) + capture→`disc` forwarder, battery/charger/jack status,
-   settings storage, DAC low-power when idle, library database, EQ.
+   FiiO's kernel has the multi-rate `u_audio` backport) + capture→`disc` forwarder, jack status, low-battery
+   power-off, settings storage, DAC low-power when idle, library database, EQ. Battery indicator + charge limit:
+   done 2026-11-26.
 
    Verified on device 2026-11-25 (`scripts/device/radiotest.sh`, stock procedure): `bcmdhd` + stock fw/nvram →
    `wlan0` (MAC from chip OTP, country CN by default), `iw` scan OK; `brcm_patchram_plus --enable_hci ... --baudrate
@@ -152,8 +162,8 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
    on the host (RO LUN) and reverts cleanly. UAC2 gadget: host sees S32_LE stereo, adaptive iso OUT, 32k–384k + a
    native-DSD altset, and accepted a 96k stream; the ACM function did not enumerate alongside it, and unbinding the
    composite afterwards left the device off USB (no panic reboot). USB-DAC mode must be its own gadget (as stock's
-   `uac_demo`), switched with care; root-cause the teardown before shipping it. Charger + gauge need no userland
-   (`/sys/class/power_supply/cw221X-bat`). RTC does not tick (`rtc32k_init_on=0`), so time needs NTP.
+   `uac_demo`), switched with care; root-cause the teardown before shipping it. The charger's driver charges on its
+   own; the gauge is `/sys/class/power_supply/cw221X-bat`. RTC does not tick (`rtc32k_init_on=0`), so time needs NTP.
    Full image re-verified 2026-11-25 from RAM (`disc-tryimage`): rates 32k–384k + soxr resampling, transport 8/8,
    60/60 skip bursts, skip 29–49 ms same rate / ~300 ms across rates, playback clean under 2-core CPU + SD + 24 MB
    tmpfs load at 48k and 96k (underruns only when overloaded ×2 with RAM nearly exhausted), dbus + bluetoothd →

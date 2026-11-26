@@ -4,7 +4,7 @@ override CFLAGS += -Wall -Wextra -std=gnu11 -D_GNU_SOURCE $(shell $(PKG_CONFIG) 
 override LDLIBS += $(shell $(PKG_CONFIG) --libs lvgl libmpdclient) -ldiscd -lm -lpthread
 DESTDIR ?=
 
-discui: main.c hw.c player.c
+discui: main.c battery.c hw.c player.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 install: discui

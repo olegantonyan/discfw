@@ -8,7 +8,7 @@ libdiscd.a: proto.c
 	$(CC) $(CFLAGS) -fPIC -c -o proto.o proto.c
 	$(AR) rcs $@ proto.o
 
-discd: discd.c proto.c
+discd: discd.c power.c proto.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 discctl: discctl.c proto.c

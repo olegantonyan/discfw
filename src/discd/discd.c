@@ -1,4 +1,5 @@
 #include "cs43131_ioctl.h"
+#include "power.h"
 #include "proto.h"
 
 #include <errno.h>
@@ -21,6 +22,7 @@
 #define VOL_DEFAULT 0x50
 #define VOL_STEP 4
 #define RELEASE_MS 500
+#define POWER_TICK_MS 5000
 
 static const unsigned rates[] = { 32000, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000 };
 
@@ -116,6 +118,15 @@ static void handle(const char *line, FILE *out)
 	int r = -1;
 
 	sscanf(line, "%15s %31s", cmd, arg);
+	if (!strcmp(cmd, "battery") || !strcmp(cmd, "limit")) {
+		if (!strcmp(cmd, "limit") && power_set_limit(atoi(arg))) {
+			fprintf(out, "err %s\n", cmd);
+			return;
+		}
+		power_tick();
+		power_status(out);
+		return;
+	}
 	if (strcmp(cmd, "status") && strcmp(cmd, "vol"))
 		release_at = 0;
 	if (!strcmp(cmd, "release")) {
@@ -144,15 +155,23 @@ static void serve(int lfd)
 {
 	struct timeval tv = { .tv_sec = 2 };
 	char line[128];
+	long long tick_at = now_ms() + POWER_TICK_MS;
 
 	for (;;) {
 		struct pollfd pfd = { .fd = lfd, .events = POLLIN };
-		long long wait = release_at ? release_at - now_ms() : -1;
-		if (release_at && wait <= 0) {
+		long long now = now_ms(), wait = tick_at - now;
+		if (release_at && release_at <= now) {
 			release_at = 0;
 			dac_mute(1);
 			continue;
 		}
+		if (wait <= 0) {
+			power_tick();
+			tick_at = now + POWER_TICK_MS;
+			continue;
+		}
+		if (release_at && release_at - now < wait)
+			wait = release_at - now;
 		if (poll(&pfd, 1, (int)wait) <= 0)
 			continue;
 		int cfd = accept4(lfd, NULL, NULL, SOCK_CLOEXEC);
@@ -213,6 +232,7 @@ int main(void)
 		fclose(f);
 	}
 	dac_volume(vol);
+	power_init();
 	lfd = listen_sock();
 	if (lfd < 0) {
 		syslog(LOG_ERR, "socket: %m");

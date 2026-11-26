@@ -8,7 +8,7 @@ int main(int argc, char **argv)
 	char cmd[128] = "", reply[256];
 
 	if (argc < 2) {
-		fprintf(stderr, "usage: discctl rate <hz> | mute | unmute | vol <n>|+|- | off | status\n");
+		fprintf(stderr, "usage: discctl rate <hz> | mute | unmute | vol <n>|+|- | off | status | battery | limit <50-100>\n");
 		return 2;
 	}
 	for (int i = 1; i < argc; i++) {

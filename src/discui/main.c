@@ -1,3 +1,4 @@
+#include "battery.h"
 #include "hw.h"
 #include "player.h"
 
@@ -17,6 +18,8 @@
 #define FONT_PATH "/usr/share/fonts/dejavu/DejaVuSans.ttf"
 #define MAX_ENTRIES 4000
 #define SCREEN_TIMEOUT_MS 60000
+#define BATTERY_POLL_MS 3000
+#define N_LIMITS 3
 
 enum {
 	DK_PLAY = 250,
@@ -38,10 +41,15 @@ static char **entries;
 static int n_entries, n_dirs;
 
 static const lv_font_t *font_big, *font_small;
-static lv_obj_t *scr_browse, *scr_play;
+static lv_obj_t *scr_browse, *scr_play, *scr_set;
 static lv_obj_t *lbl_dir, *list, *btn_np;
 static lv_obj_t *lbl_title, *lbl_artist, *lbl_time, *lbl_info, *bar, *lbl_playbtn;
+static lv_obj_t *lbl_batt, *lbl_batt_info, *bm_limit;
 static int key_fd = -1;
+static int shown_limit = -1;
+
+static const int limits[N_LIMITS] = { 100, 80, 60 };
+static const char *const limit_map[N_LIMITS + 1] = { "100%", "80%", "60%", "" };
 
 static uint32_t tick_ms(void)
 {
@@ -145,6 +153,14 @@ static void scan_dir(const char *path)
 }
 
 static void browse(const char *path);
+static void battery_timer(lv_timer_t *t);
+
+static void on_settings(lv_event_t *e)
+{
+	(void)e;
+	lv_screen_load(scr_set);
+	battery_timer(NULL);
+}
 
 static void on_entry(lv_event_t *e)
 {
@@ -180,6 +196,9 @@ static void browse(const char *path)
 	if (strcmp(cur_dir, root_dir)) {
 		b = lv_list_add_button(list, LV_SYMBOL_UP, "..");
 		lv_obj_add_event_cb(b, on_entry, LV_EVENT_CLICKED, (void *)(intptr_t)-1);
+	} else {
+		b = lv_list_add_button(list, LV_SYMBOL_SETTINGS, "Settings");
+		lv_obj_add_event_cb(b, on_settings, LV_EVENT_CLICKED, NULL);
 	}
 	for (int i = 0; i < n_entries; i++) {
 		b = lv_list_add_button(list, i < n_dirs ? LV_SYMBOL_DIRECTORY : LV_SYMBOL_AUDIO, entries[i]);
@@ -243,12 +262,91 @@ static lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, int w, lv_align_
 	return l;
 }
 
+static const char *battery_symbol(int cap)
+{
+	return cap >= 90 ? LV_SYMBOL_BATTERY_FULL : cap >= 65 ? LV_SYMBOL_BATTERY_3 : cap >= 40 ? LV_SYMBOL_BATTERY_2 : cap >= 15 ? LV_SYMBOL_BATTERY_1 : LV_SYMBOL_BATTERY_EMPTY;
+}
+
+static const char *battery_state_text(const char *s)
+{
+	return !strcmp(s, "battery") ? "On battery" : !strcmp(s, "charging") ? "Charging" : !strcmp(s, "full") ? "Charged" : !strcmp(s, "held") ? "Held at limit" : "Not charging";
+}
+
+static void show_battery(const struct battery *b)
+{
+	bool powered = strcmp(b->state, "battery");
+
+	lv_label_set_text_fmt(lbl_batt, "%s%s %d%%", !strcmp(b->state, "charging") ? LV_SYMBOL_CHARGE " " : powered ? LV_SYMBOL_USB " " : "", battery_symbol(b->cap), b->cap);
+	lv_obj_set_style_text_color(lbl_batt, !powered && b->cap <= 10 ? lv_palette_main(LV_PALETTE_RED) : lv_color_white(), 0);
+	lv_label_set_text_fmt(lbl_batt_info, "%d%%   %.2f V   %.1f °C\n%s   %+d mA", b->cap, b->mv / 1000.0, b->temp / 10.0, battery_state_text(b->state), b->ma);
+	if (b->limit == shown_limit)
+		return;
+	shown_limit = b->limit;
+	lv_buttonmatrix_clear_button_ctrl_all(bm_limit, LV_BUTTONMATRIX_CTRL_CHECKED);
+	for (int i = 0; i < N_LIMITS; i++)
+		if (limits[i] == b->limit)
+			lv_buttonmatrix_set_button_ctrl(bm_limit, i, LV_BUTTONMATRIX_CTRL_CHECKED);
+}
+
+static void battery_timer(lv_timer_t *t)
+{
+	struct battery b;
+
+	(void)t;
+	if (!screen_is_on())
+		return;
+	if (battery_get(&b)) {
+		lv_label_set_text(lbl_batt, "");
+		return;
+	}
+	show_battery(&b);
+}
+
+static void on_limit(lv_event_t *e)
+{
+	uint32_t i = lv_buttonmatrix_get_selected_button(bm_limit);
+	struct battery b;
+
+	(void)e;
+	shown_limit = -1;
+	if (i < N_LIMITS && battery_set_limit(limits[i], &b) == 0)
+		show_battery(&b);
+	else
+		battery_timer(NULL);
+}
+
+static void build_settings(void)
+{
+	lv_obj_t *l;
+
+	scr_set = lv_obj_create(NULL);
+	lv_label_set_text(label(scr_set, font_big, 220, LV_ALIGN_TOP_MID, 40), "Battery");
+	lbl_batt_info = label(scr_set, font_small, 280, LV_ALIGN_CENTER, -40);
+	lv_label_set_long_mode(lbl_batt_info, LV_LABEL_LONG_MODE_WRAP);
+	l = label(scr_set, font_small, 220, LV_ALIGN_CENTER, 12);
+	lv_label_set_text(l, "Charge limit");
+	bm_limit = lv_buttonmatrix_create(scr_set);
+	lv_buttonmatrix_set_map(bm_limit, limit_map);
+	lv_buttonmatrix_set_button_ctrl_all(bm_limit, LV_BUTTONMATRIX_CTRL_CHECKABLE);
+	lv_buttonmatrix_set_one_checked(bm_limit, true);
+	lv_obj_set_size(bm_limit, 270, 60);
+	lv_obj_set_style_text_font(bm_limit, font_small, 0);
+	lv_obj_align(bm_limit, LV_ALIGN_CENTER, 0, 58);
+	lv_obj_add_event_cb(bm_limit, on_limit, LV_EVENT_VALUE_CHANGED, NULL);
+	lv_obj_align(round_button(scr_set, LV_SYMBOL_LEFT, 52, on_goto_browse, 0), LV_ALIGN_BOTTOM_MID, 0, -14);
+
+	lbl_batt = lv_label_create(lv_layer_top());
+	lv_obj_set_style_text_font(lbl_batt, &lv_font_montserrat_14, 0);
+	lv_label_set_text(lbl_batt, "");
+	lv_obj_align(lbl_batt, LV_ALIGN_TOP_MID, 0, 8);
+}
+
 static void build_ui(void)
 {
 	lv_obj_t *row;
 
 	scr_browse = lv_obj_create(NULL);
-	lbl_dir = label(scr_browse, font_big, 220, LV_ALIGN_TOP_MID, 26);
+	lbl_dir = label(scr_browse, font_big, 220, LV_ALIGN_TOP_MID, 32);
 	list = lv_list_create(scr_browse);
 	lv_obj_set_size(list, 290, 250);
 	lv_obj_align(list, LV_ALIGN_CENTER, 0, 10);
@@ -260,7 +358,7 @@ static void build_ui(void)
 	lv_obj_add_flag(btn_np, LV_OBJ_FLAG_HIDDEN);
 
 	scr_play = lv_obj_create(NULL);
-	lv_obj_align(round_button(scr_play, LV_SYMBOL_LIST, 48, on_goto_browse, 0), LV_ALIGN_TOP_MID, 0, 22);
+	lv_obj_align(round_button(scr_play, LV_SYMBOL_LIST, 48, on_goto_browse, 0), LV_ALIGN_TOP_MID, 0, 30);
 	lbl_title = label(scr_play, font_big, 270, LV_ALIGN_CENTER, -60);
 	lv_label_set_long_mode(lbl_title, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
 	lbl_artist = label(scr_play, font_small, 250, LV_ALIGN_CENTER, -28);
@@ -278,6 +376,7 @@ static void build_ui(void)
 	round_button(row, LV_SYMBOL_PREV, 60, on_ctl, 0);
 	lbl_playbtn = lv_obj_get_child(round_button(row, LV_SYMBOL_PLAY, 72, on_ctl, 1), 0);
 	round_button(row, LV_SYMBOL_NEXT, 60, on_ctl, 2);
+	build_settings();
 }
 
 static void show_volume(void)
@@ -410,6 +509,8 @@ int main(void)
 	show_volume();
 	lv_timer_create(keys_timer, 20, NULL);
 	lv_timer_create(np_timer, 500, NULL);
+	lv_timer_create(battery_timer, BATTERY_POLL_MS, NULL);
+	battery_timer(NULL);
 	for (;;) {
 		uint32_t t = lv_timer_handler();
 		usleep((t > 20 ? 20 : t) * 1000);
