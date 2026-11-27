@@ -1,4 +1,8 @@
 #!/bin/sh
 [ "$1" = step ] || [ "$1" = stratum ] || exit 0
 touch /run/time.synced
-[ -d /usr/data/discfw ] && date +%s > /usr/data/discfw/clock
+S=/usr/data/discfw
+[ -d $S ] || exit 0
+date +%s > $S/clock
+hwclock -w -u 2>/dev/null && [ ! -e $S/clock.rtc ] && touch $S/clock.rtc
+exit 0

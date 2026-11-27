@@ -7,7 +7,7 @@ discfw runs on FiiO's Linux 4.4.94 kernel from firmware V2.57 (`xImage`, SHA-256
 - `4.4.94 SMP PREEMPT`, HZ = 100, built with Ingenic's toolchain (gcc 7.2). Module vermagic `4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT`, no module versions.
 - No swap (no `CONFIG_SWAP`, so no zram), no kexec, no initrd, no IPv6, no cpufreq, no cpuidle.
 - Built in: squashfs (LZO), UBIFS, FiiO's exFAT driver, vfat, configfs USB gadget (ACM, mass storage, UAC2), Bluetooth (`btbcm`, `hci_uart`), `cfg80211`.
-- The RTC does not keep time (`rtc32k_init_on=0`). discfw sets the clock from NTP and saves it at shutdown (`/usr/data/discfw/clock`).
+- The RTC (32.768 kHz crystal) keeps counting while the player is off. FiiO's driver initializes it on the first open of `/dev/rtc0` and resets it to 2020-03-01 unless its marker (`HSPR` = `RTCV`) and divider are set; it keeps Unix time in UTC. Like stock, discfw reads it at boot (`hwclock -s`) and writes it after an NTP sync and at shutdown.
 - Kernel messages go to UART3 (`ttyS3`, 115200 baud). The kernel restarts 10 seconds after a panic.
 
 ## Why the user space is built the way it is

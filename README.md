@@ -40,7 +40,7 @@ What you get today:
 
 Works: everything in the list above. See [docs/USAGE.md](docs/USAGE.md) for details.
 
-Not yet: Bluetooth receiver mode, IPv6. The music card is read-only on the player. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
+Not yet: Bluetooth receiver mode, IPv6. The music card is read-only on the player. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
 
 ## Hardware
 
