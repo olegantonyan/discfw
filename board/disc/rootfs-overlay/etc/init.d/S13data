@@ -34,9 +34,14 @@ start() {
 		date -s "@$saved" >/dev/null
 		hwclock -w -u 2>/dev/null
 		rm -f $S/clock.rtc
+		clock="RTC $((saved - now)) s behind the time saved at shutdown, using the saved time"
 	elif [ -e $S/clock.rtc ]; then
 		touch /run/time.synced
+		clock="RTC holds network time"
+	else
+		clock="RTC not set from the network since its last reset"
 	fi
+	logger -t clock "$clock"
 	mode=$(cat $S/mode.next 2>/dev/null || cat $S/mode.default 2>/dev/null)
 	rm -f $S/mode.next
 	case "$mode" in storage | usbdac) ;; *) mode=player ;; esac

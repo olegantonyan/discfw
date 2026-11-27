@@ -209,3 +209,34 @@ bool has_suffix_ci(const char *s, const char *suffix)
 	size_t n = strlen(s), m = strlen(suffix);
 	return n >= m && !strcasecmp(s + n - m, suffix);
 }
+
+bool filter_quote(char *out, size_t len, const char *v)
+{
+	size_t o = 0;
+
+	if (len < 3)
+		return false;
+	out[o++] = '"';
+	for (; *v; v++) {
+		if (o + 4 > len)
+			return false;
+		if (*v == '"' || *v == '\\' || *v == '\'')
+			out[o++] = '\\';
+		out[o++] = *v;
+	}
+	out[o++] = '"';
+	out[o] = 0;
+	return true;
+}
+
+int year_of(const char *date)
+{
+	int y = 0;
+
+	for (int i = 0; i < 4; i++) {
+		if (!is_digit((unsigned char)date[i]))
+			return 0;
+		y = y * 10 + date[i] - '0';
+	}
+	return y;
+}

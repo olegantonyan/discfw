@@ -99,6 +99,12 @@ static void toast_hide(lv_timer_t *t)
 		lv_obj_set_hidden(toast, true);
 }
 
+void ui_busy(const char *text)
+{
+	ui_toast(text);
+	lv_refr_now(NULL);
+}
+
 void ui_toast(const char *text)
 {
 	if (!toast) {

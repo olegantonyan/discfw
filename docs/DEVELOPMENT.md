@@ -87,6 +87,8 @@ All of these need the player running discfw and connected over USB.
 
 Environment: `DISC_RUN_DIR` (sockets, default `/run`), `DISC_DATA_DIR` (settings and state, default `/usr/data/discfw`), `DISC_MUSIC_ROOT`, `DISCUI_FONT`, `DISCUI_ROTATE=0` (no 180° rotation). Point them at a host MPD to test with real music.
 
+`scripts/host-foldertest` checks folder playback end to end: it generates a small music tree, runs a host MPD (null output) and the headless UI, and checks the queue after taps and menu actions (start track, rejected files, play through folders, end of card, recursive order, shuffle). Needs mpd, mpc, socat and ffmpeg as well. Run it after any change to folder playback.
+
 Needs: a host C compiler with ASan/UBSan, make, cmake, ninja, pkg-config, rsync, and the development packages of glib-2.0 (with gio-unix), libmpdclient, libpng, libjpeg and zlib. The LVGL source is fetched with `make br-lvgl-source` if it is missing.
 
 ## Tests on the player

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 uint32_t utf8_next(const char **s);
@@ -10,3 +11,5 @@ bool uc_is_letter(uint32_t cp);
 int nat_cmp(const char *a, const char *b);
 uint32_t index_letter(const char *s);
 bool has_suffix_ci(const char *s, const char *suffix);
+bool filter_quote(char *out, size_t len, const char *v);
+int year_of(const char *date);

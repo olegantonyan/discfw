@@ -449,3 +449,80 @@ static lv_obj_t *pl_create(void *arg)
 }
 
 const struct screen_ops scr_playlist = { .name = "playlist", .create = pl_create };
+
+struct add_ctx {
+	char **uris, **names;
+	int n, n_names;
+	char suggest[256];
+};
+
+static struct add_ctx *pending_add;
+
+static void add_free(struct add_ctx *a)
+{
+	if (a == pending_add)
+		pending_add = NULL;
+	for (int i = 0; i < a->n; i++)
+		free(a->uris[i]);
+	for (int i = 0; i < a->n_names; i++)
+		free(a->names[i]);
+	free(a->uris);
+	free(a->names);
+	free(a);
+}
+
+static void add_named(const char *text, void *ctx)
+{
+	struct add_ctx *a = ctx;
+	char msg[600];
+	int added;
+
+	if (text[0] && !strchr(text, '/')) {
+		added = mpdc_playlist_append(text, a->uris, a->n);
+		snprintf(msg, sizeof(msg), "Added %d to \"%s\"", added < 0 ? 0 : added, text);
+		ui_toast(msg);
+	} else if (text[0]) {
+		ui_toast("Invalid name");
+	}
+	add_free(a);
+}
+
+static void add_picked(int idx, void *ctx)
+{
+	struct add_ctx *a = ctx;
+
+	if (idx == 0)
+		ui_text_input("New playlist", a->suggest, false, add_named, a);
+	else
+		add_named(a->names[idx - 1], a);
+}
+
+void playlist_add_uris(char *const *uris, int n, const char *suggest)
+{
+	struct add_ctx *a;
+	const char **items;
+
+	if (pending_add)
+		add_free(pending_add);
+	a = calloc(1, sizeof(*a));
+	a->uris = calloc(n + 1, sizeof(char *));
+	for (int i = 0; i < n; i++)
+		if (strncmp(uris[i], "file://", 7) && uris[i][0] != '/')
+			a->uris[a->n++] = strdup(uris[i]);
+	if (!a->n) {
+		ui_toast("Nothing to add (not in library)");
+		add_free(a);
+		return;
+	}
+	snprintf(a->suggest, sizeof(a->suggest), "%s", suggest ? suggest : "");
+	a->n_names = mpdc_playlists(&a->names);
+	if (a->n_names < 0)
+		a->n_names = 0;
+	items = calloc(a->n_names + 1, sizeof(char *));
+	items[0] = LV_SYMBOL_PLUS " New playlist…";
+	for (int i = 0; i < a->n_names; i++)
+		items[i + 1] = a->names[i];
+	pending_add = a;
+	ui_menu("Add to playlist", items, a->n_names + 1, add_picked, a);
+	free(items);
+}

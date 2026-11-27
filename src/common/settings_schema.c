@@ -52,7 +52,7 @@ const struct set_def set_defs[] = {
 	  "playback", "Play order"),
 	E("play.resume", "position", "off=Off|song=Song|position=Position", "playback", "Resume after power-on"),
 	B("play.recursive", "0", "playback", "Folder play includes subfolders"),
-	B("play.through_folders", "0", "playback", "Play through folders"),
+	B("play.through_folders", "1", "playback", "Play through folders"),
 	E("play.replaygain", "off", "off=Off|track=Track|album=Album|auto=Auto", "playback", "ReplayGain"),
 	E("play.sleep_action", "pause", "pause=Pause|poweroff=Power off", "playback", "Sleep timer action"),
 	E("pl.group", "album", "none=No grouping|album=Album|folder=Folder|both=Album and folder", "playback",

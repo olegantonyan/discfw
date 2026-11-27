@@ -263,6 +263,7 @@ int main(int argc, char **argv)
 	input_set_back_handler(nav_back);
 	state_load();
 	cover_init();
+	through_init();
 	mpdc_init();
 	sysc_init();
 	dbg_init();

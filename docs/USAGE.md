@@ -4,11 +4,12 @@ How to use the player with discfw: the UI, buttons, settings, network, Bluetooth
 
 ## UI
 
-- **Screens:** Home, Folders, Now playing, Queue, Playlists, Library (artists, albums, genres), Settings.
+- **Screens:** Home, Folders, Now playing, Queue, Playlists, Library, Settings.
 - **Back:** swipe right from the left edge, on every screen except the lock screen, also out of menus and dialogs. A bulge shows how far you are.
 - **Shade:** pull down from the top edge: the current song (tap it for Now playing), player controls, Wi-Fi and Bluetooth toggles, volume, brightness, Settings. Hold the Wi-Fi or Bluetooth toggle to open its settings.
 - **Lock screen:** comes on when the screen wakes (`lock.*` settings). Swipe up to unlock.
-- **Folders:** a letter strip for fast scrolling. Each folder remembers its position. Hold a row for its menu: play, shuffle, add to queue, create playlist, add to playlist. Folders that are not in the library yet play at once and are scanned in the background.
+- **Folders:** a letter strip for fast scrolling. Each folder remembers its position. Hold a row for its menu: play, shuffle (starts at a random song), add to queue, create playlist, add to playlist. With `play.recursive`, subfolders come after a folder's own songs, in the same order as on screen. Folders that are not in the library yet play at once and are scanned in the background. With `play.through_folders` (on by default) and the Sequential or "Sequential, no loop" order, the next folder (in the order Folders shows) is queued while a folder's last song plays, and the played folder leaves the queue. At the end of the card, Sequential starts again from the first folder; "Sequential, no loop" stops.
+- **Library:** Search, Artists (`lib.artist_tag`; sorted by ArtistSort/AlbumArtistSort), Albums, Genres, Composers, Years, Recently added, Hi-res (above 48 kHz, or 24/32-bit). An album is its album name plus album artist (or artist, when the album artist tag is missing), shown with artist and year; album tracks show disc headers. Hold a row, or tap the title, for its menu: play, shuffle, add to queue, add to playlist, open folder. Search matches artist, album and title, ignoring case for Latin letters only. Recently added follows MPD's "added" time, so right after a full scan or a library reset it is in scan order.
 - **Long names** scroll by themselves (`ui.marquee`: all, only the playing item, off). Hold a row and drag sideways to scroll its name by hand.
 - **Now playing:** to seek, drag along the edge ring, or hold the cover and turn it (one turn = 1 minute). Cover style: none, static, rotating or vinyl (`ui.cover_mode`). ≡ opens the menu.
 - **Screen rotation:** `ui.rotation` turns the picture and touch by 0°, 90°, 180° or 270°, as on stock; it applies at once. The boot logo and the buttons stay as they are.
@@ -44,13 +45,13 @@ discfw reset KEY
 discfw cfg KEY            # read the file directly, without the daemon
 ```
 
-These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folders`, `audio.pause_bt_loss`, `lib.playlist_sort`, `bt.autoreconnect`, `power.<profile>.wifi_idle_min`, `power.<profile>.bt_idle_min`.
+These settings are shown but **do nothing yet**: `time.ntp`, `audio.pause_bt_loss`, `lib.playlist_sort`, `bt.autoreconnect`, `power.<profile>.wifi_idle_min`, `power.<profile>.bt_idle_min`.
 
 ## Music and library
 
 - Put music on a microSD card (exFAT or FAT32), with a card reader or in [USB storage mode](#usb-storage-and-usb-dac). The card is mounted read-only at `/media/sd`.
 - Formats: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC, ALAC, APE, WavPack, WMA, TTA. PCM from 32 kHz to 384 kHz. Other rates are resampled to 44.1 kHz.
-- The library is MPD's database in `/usr/data/discfw/mpd/`. When it is scanned depends on `lib.scan`: when the card changes (default), on every mount, or only by hand. Scans run at low priority and never while the card is out. On the player: `discfw library scan` (new and changed files), `discfw library rescan` (everything), `discfw library reset` (delete the database).
+- The library is MPD's database in `/usr/data/discfw/mpd/`. When it is scanned depends on `lib.scan`: when the card changes (default), on every mount, or only by hand. Scans run at low priority and never while the card is out. On the player: `discfw library scan` (new and changed files), `discfw library rescan` (everything), `discfw library reset` (delete the database). MPD rebuilds the database from scratch when its tag list changes (`metadata_to_use` in `mpd-run`), as after an update that adds tags.
 - Playback state (queue, position, current folder) survives power-off.
 
 ## Wi-Fi
@@ -144,6 +145,6 @@ discfw ui state | dump [top] | tap X Y | hold X Y [MS] | swipe X1 Y1 X2 Y2 [MS] 
 
 `discfw ui` talks to the UI's debug socket `/run/discui.sock` (`shot` saves a PNG). From the PC, `scripts/disc-shot FILE.png` takes a screenshot.
 
-- **Time zone:** `time.zone` (list in `/usr/share/discfw/zones.tsv`). The clock is set by NTP and kept by the RTC while the player is off. It shows `?` until NTP has set it once; after the RTC loses power, it falls back to the time saved at the last shutdown.
+- **Time zone:** `time.zone` (list in `/usr/share/discfw/zones.tsv`). The clock is set by NTP and kept by the RTC while the player is off. It shows `?` until NTP has set it once; after the RTC loses power or is reset (seen after flashing), it falls back to the time saved at the last shutdown and shows `?` until the next sync. `logread | grep clock` shows which case applied at boot.
 - **Logs:** `logread` (a 256 KB ring in RAM).
 - **State on the data partition** (`/usr/data/discfw/`, UBIFS, mounted `sync`; FiiO's files there stay untouched): `settings`, `wifi/`, `bluetooth/` (pairings), `bluealsa/`, `ssh/` (host keys, `root/authorized_keys`), `mpd/` (database, state, playlists), `hostname`, `clock` (time at the last shutdown), `clock.rtc` (the RTC holds network time), `TZ`, `mode.next` (the mode for the next boot, used once), `mode.default` (the mode at every boot), `boot/` (one-time test boot, see [DEVELOPMENT.md](DEVELOPMENT.md#test-without-flashing)). If the partition does not mount, a RAM disk is used instead and nothing is formatted.

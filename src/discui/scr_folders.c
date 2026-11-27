@@ -14,8 +14,6 @@ enum pending_op { PEND_NONE, PEND_CREATE, PEND_APPEND };
 struct folders {
 	lv_obj_t *scr, *title, *list;
 	char path[2048];
-	const struct dirlist *dl;
-	int sel;
 	char playing[2048];
 	enum pending_op pend;
 	char pend_dir[2048], pend_name[512];
@@ -32,9 +30,19 @@ static bool at_root(struct folders *f)
 	return !strcmp(f->path, root());
 }
 
+static const struct dirlist *dl(struct folders *f)
+{
+	return fsdir_get(f->path);
+}
+
+static bool valid(struct folders *f, int idx)
+{
+	return idx >= 0 && idx < dl(f)->n;
+}
+
 static void full_path(struct folders *f, int idx, char *out, size_t len)
 {
-	snprintf(out, len, "%s/%s", f->path, f->dl->v[idx].name);
+	snprintf(out, len, "%s/%s", f->path, dl(f)->v[idx].name);
 }
 
 static void dir_key(const char *path, char *key, size_t len)
@@ -53,16 +61,18 @@ static void save_pos(struct folders *f)
 
 static int count(void *ctx)
 {
-	struct folders *f = ctx;
-	return f->dl ? f->dl->n : 0;
+	return dl(ctx)->n;
 }
 
 static void row(void *ctx, int idx, struct vrow *r)
 {
 	struct folders *f = ctx;
-	const struct dentry *e = &f->dl->v[idx];
+	const struct dentry *e;
 	char full[2100];
 
+	if (!valid(f, idx))
+		return;
+	e = &dl(f)->v[idx];
 	r->icon = e->dir ? LV_SYMBOL_DIRECTORY : LV_SYMBOL_AUDIO;
 	snprintf(r->text, sizeof(r->text), "%s", e->name);
 	if (!e->dir && f->playing[0]) {
@@ -77,7 +87,7 @@ static void row(void *ctx, int idx, struct vrow *r)
 
 static uint32_t letter(void *ctx, int idx)
 {
-	return ((struct folders *)ctx)->dl->v[idx].letter;
+	return valid(ctx, idx) ? dl(ctx)->v[idx].letter : 0;
 }
 
 static void update_playing(struct folders *f)
@@ -91,20 +101,21 @@ static void update_playing(struct folders *f)
 static void load(struct folders *f, const char *path, const char *select)
 {
 	char key[2100];
+	const struct dirlist *l;
 	const char *name;
 	int first = 0;
 
 	snprintf(f->path, sizeof(f->path), "%s", path);
-	f->dl = fsdir_get(f->path);
+	l = dl(f);
 	name = strrchr(f->path, '/');
 	lv_label_set_text(f->title, at_root(f) ? "SD card" : name ? name + 1 : f->path);
-	vlist_set_empty(f->list, !f->dl->ok ? (at_root(f) ? "No SD card" : "Folder not found") : "No music here");
+	vlist_set_empty(f->list, !l->ok ? (at_root(f) ? "No SD card" : "Folder not found") : "No music here");
 	vlist_reload(f->list);
 	dir_key(f->path, key, sizeof(key));
 	first = state_get_int(key, 0);
 	if (select) {
-		for (int i = 0; i < f->dl->n; i++)
-			if (!strcmp(f->dl->v[i].name, select)) {
+		for (int i = 0; i < l->n; i++)
+			if (!strcmp(l->v[i].name, select)) {
 				if (i < first || i > first + 4)
 					first = i > 2 ? i - 2 : 0;
 				break;
@@ -120,11 +131,26 @@ static void enter(struct folders *f, const char *path, const char *select)
 	load(f, path, select);
 }
 
+static bool scan_requested(const char *dir)
+{
+	static char done[16][2048];
+	static int next;
+
+	for (int i = 0; i < 16; i++)
+		if (!strcmp(done[i], dir))
+			return true;
+	snprintf(done[next++ % 16], sizeof(done[0]), "%s", dir);
+	return false;
+}
+
 static int collect(const char *dir, bool recursive, char ***uris)
 {
-	int missing, n = fsdir_collect(dir, recursive, uris, &missing);
+	int missing, n;
 
-	if (missing) {
+	if (recursive && fsdir_get(dir)->ndirs >= 8)
+		ui_busy("Adding…");
+	n = fsdir_collect(dir, recursive, uris, &missing);
+	if (missing && !scan_requested(dir)) {
 		mpdc_update(dir);
 		ui_toast("Folder not in library yet, scanning in background");
 	}
@@ -134,22 +160,26 @@ static int collect(const char *dir, bool recursive, char ***uris)
 static void play_dir(struct folders *f, const char *dir, int start_file, bool shuffle)
 {
 	char **uris, origin[2100];
-	int n = collect(dir, set_get_bool("play.recursive"), &uris);
+	int n;
 
+	(void)f;
+	if (!app.mpd.connected) {
+		ui_toast("Music service not running");
+		return;
+	}
+	n = collect(dir, set_get_bool("play.recursive"), &uris);
 	if (!n) {
 		fsdir_free_strv(uris, n);
 		ui_toast("No music here");
 		return;
 	}
 	snprintf(origin, sizeof(origin), "folder:%s", dir);
-	if (shuffle)
-		mpdc_set_order("random");
-	else
-		mpdc_set_order(set_get("play.order"));
-	if (mpdc_play_uris(uris, n, start_file < 0 ? 0 : start_file, origin) == 0)
+	mpdc_set_order(shuffle ? "random" : set_get("play.order"));
+	if (mpdc_play_uris(uris, n, shuffle ? -1 : start_file < 0 ? 0 : start_file, origin) == 0)
 		nav_push(&scr_np, NULL);
+	else
+		ui_toast("Could not start playback");
 	fsdir_free_strv(uris, n);
-	(void)f;
 }
 
 static void rel_of(const char *dir, char *out, size_t len)
@@ -332,7 +362,7 @@ static void menu_picked(int idx, void *ctx)
 		if (m->dir)
 			play_dir(f, m->path, 0, false);
 		else
-			play_dir(f, f->path, m->idx - f->dl->ndirs, false);
+			play_dir(f, f->path, m->idx - dl(f)->ndirs, false);
 		break;
 	case M_SHUFFLE:
 		play_dir(f, m->path, 0, true);
@@ -410,13 +440,15 @@ static void click(void *ctx, int idx)
 	struct folders *f = ctx;
 	char full[2100];
 
+	if (!valid(f, idx))
+		return;
 	full_path(f, idx, full, sizeof(full));
-	if (f->dl->v[idx].dir) {
+	if (dl(f)->v[idx].dir) {
 		enter(f, full, NULL);
 		return;
 	}
 	save_pos(f);
-	play_dir(f, f->path, idx - f->dl->ndirs, false);
+	play_dir(f, f->path, idx - dl(f)->ndirs, false);
 }
 
 static void hold(void *ctx, int idx)
@@ -424,8 +456,10 @@ static void hold(void *ctx, int idx)
 	struct folders *f = ctx;
 	char full[2100];
 
+	if (!valid(f, idx))
+		return;
 	full_path(f, idx, full, sizeof(full));
-	open_menu(f, full, f->dl->v[idx].dir, idx);
+	open_menu(f, full, dl(f)->v[idx].dir, idx);
 }
 
 static const struct vlist_ops ops = { .count = count, .row = row, .click = click, .hold = hold, .letter = letter };
@@ -512,3 +546,17 @@ void folders_open_at(const char *path, const char *select_name)
 }
 
 const struct screen_ops scr_folders = { .name = "folders", .create = create, .back = back };
+
+void folders_open_uri(const char *uri)
+{
+	char *path = uri[0] ? mpdc_path_for_uri(uri) : NULL, *slash;
+
+	if (!path)
+		return;
+	slash = strrchr(path, '/');
+	if (slash) {
+		*slash = 0;
+		folders_open_at(path, slash + 1);
+	}
+	free(path);
+}

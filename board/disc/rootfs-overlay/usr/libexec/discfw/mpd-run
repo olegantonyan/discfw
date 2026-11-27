@@ -36,7 +36,7 @@ database {
 	compress "no"
 }
 auto_update "no"
-metadata_to_use "artist,albumartist,album,title,track,disc,genre,date,composer,performer,name,comment"
+metadata_to_use "artist,artistsort,albumartist,albumartistsort,album,albumsort,title,titlesort,track,disc,genre,date,originaldate,composer,composersort,performer,conductor,ensemble,work,movement,movementnumber,showmovement,grouping,label,mood,name,comment"
 log_file "syslog"
 bind_to_address "/run/mpd.sock"
 replaygain "$rg"

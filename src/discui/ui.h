@@ -26,6 +26,7 @@ lv_obj_t *ui_label(lv_obj_t *parent, const lv_font_t *font, const char *text);
 lv_obj_t *ui_round_button(lv_obj_t *parent, const char *sym, int size, lv_event_cb_t cb, void *ud);
 lv_obj_t *ui_text_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, void *ud);
 void ui_toast(const char *text);
+void ui_busy(const char *text);
 void ui_volume_overlay(void);
 void ui_shutdown_overlay(bool reboot);
 void lowbat_update(void);
@@ -88,6 +89,7 @@ void state_set(const char *k, const char *v);
 void state_set_int(const char *k, int v);
 
 void cover_init(void);
+void through_init(void);
 void cover_poll(void);
 void cover_request(const char *uri);
 const lv_image_dsc_t *cover_current(void);
@@ -107,6 +109,8 @@ void eq_unique_name(const char *base, char *out, size_t len);
 const char *eq_active_summary(char *buf, size_t len);
 
 void folders_open_at(const char *path, const char *select_name);
+void folders_open_uri(const char *uri);
+void playlist_add_uris(char *const *uris, int n, const char *suggest);
 void settings_open_page(const char *page);
 const char *settings_page_id(void);
 _Noreturn void ui_restart(void);

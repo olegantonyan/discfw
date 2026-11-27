@@ -79,6 +79,26 @@ static bool used_over_usb(void)
 	return set_get_bool("lib.scan_after_usb");
 }
 
+static bool library_empty(void)
+{
+	struct mpd_connection *c = mpdc();
+	struct mpd_status *st;
+	struct mpd_stats *s;
+	bool empty = false;
+
+	if (!c || !(st = mpd_run_status(c))) {
+		mpdc_report("status");
+		return false;
+	}
+	if (!mpd_status_get_update_id(st) && (s = mpd_run_stats(c))) {
+		empty = !mpd_stats_get_number_of_songs(s);
+		mpd_stats_free(s);
+	}
+	mpd_status_free(st);
+	mpdc_report("stats");
+	return empty;
+}
+
 static void check(const char *reason)
 {
 	const char *policy = set_get("lib.scan");
@@ -93,7 +113,7 @@ static void check(const char *reason)
 		return;
 	card_id(cid, sizeof(cid));
 	h = cid[0] ? (int)cid_hash(cid) : 0;
-	if (!usb && !strcmp(policy, "card") && h && state_get_int("card.cid", -1) == h)
+	if (!usb && !strcmp(policy, "card") && h && state_get_int("card.cid", -1) == h && !library_empty())
 		return;
 	if (library_update(usb ? "after USB storage" : reason))
 		state_set_int("card.cid", h);

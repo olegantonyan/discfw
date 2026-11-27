@@ -56,5 +56,16 @@ int main(void)
 	CHECK(!strcmp(buf, "Я"));
 	CHECK(has_suffix_ci("Song.FLAC", ".flac"));
 	CHECK(!has_suffix_ci("flac", ".flac"));
+
+	char q[32];
+	CHECK(filter_quote(q, sizeof(q), "AC/DC") && !strcmp(q, "\"AC/DC\""));
+	CHECK(filter_quote(q, sizeof(q), "Say \"Hi\" it's \\") && !strcmp(q, "\"Say \\\"Hi\\\" it\\'s \\\\\""));
+	CHECK(filter_quote(q, sizeof(q), "") && !strcmp(q, "\"\""));
+	CHECK(!filter_quote(q, 8, "too long value"));
+	CHECK(year_of("1999") == 1999);
+	CHECK(year_of("2003-05-01") == 2003);
+	CHECK(year_of("03/1999") == 0);
+	CHECK(year_of("199") == 0);
+	CHECK(year_of("") == 0);
 	CHECK_DONE();
 }

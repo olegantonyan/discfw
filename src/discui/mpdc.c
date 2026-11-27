@@ -8,10 +8,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #define TIMEOUT_MS 3000
-#define BATCH 100
+#define BATCH 500
 #define IDLE_MASK (MPD_IDLE_PLAYER | MPD_IDLE_MIXER | MPD_IDLE_OPTIONS | MPD_IDLE_QUEUE | MPD_IDLE_STORED_PLAYLIST | MPD_IDLE_DATABASE | MPD_IDLE_UPDATE)
 
 static struct mpd_connection *cmd, *idle;
@@ -54,7 +55,7 @@ static void items_add(struct items *it, const struct mpd_song *s)
 	x->album = xstrdup(mpd_song_get_tag(s, MPD_TAG_ALBUM, 0));
 	x->albumartist = xstrdup(mpd_song_get_tag(s, MPD_TAG_ALBUM_ARTIST, 0));
 	t = mpd_song_get_tag(s, MPD_TAG_DATE, 0);
-	x->year = t ? atoi(t) : 0;
+	x->year = t ? year_of(t) : 0;
 	x->dur_ms = mpd_song_get_duration_ms(s);
 	x->id = mpd_song_get_id(s);
 	t = mpd_song_get_tag(s, MPD_TAG_DISC, 0);
@@ -437,6 +438,41 @@ static int db_songs_in(const char *reldir, char ***out)
 	return n;
 }
 
+int mpdc_listall(const char *rel, char ***paths, bool **is_dir)
+{
+	struct mpd_connection *c = mpdc();
+	struct mpd_pair *p;
+	int n = 0, cap = 0;
+
+	*paths = NULL;
+	*is_dir = NULL;
+	if (!c || !mpd_send_list_all(c, rel))
+		return mpdc_check("listall"), -1;
+	while ((p = mpd_recv_pair(c))) {
+		bool d = !strcmp(p->name, "directory");
+		if (d || !strcmp(p->name, "file")) {
+			if (n == cap) {
+				cap = cap ? cap * 2 : 256;
+				*paths = realloc(*paths, cap * sizeof(char *));
+				*is_dir = realloc(*is_dir, cap * sizeof(bool));
+			}
+			(*paths)[n] = strdup(p->value);
+			(*is_dir)[n++] = d;
+		}
+		mpd_return_pair(c, p);
+	}
+	if (!mpdc_check("listall")) {
+		for (int i = 0; i < n; i++)
+			free((*paths)[i]);
+		free(*paths);
+		free(*is_dir);
+		*paths = NULL;
+		*is_dir = NULL;
+		return -1;
+	}
+	return n;
+}
+
 bool mpdc_folder_scanned(const char *abs_dir)
 {
 	char *rel = mpdc_uri_for_path(abs_dir), **songs;
@@ -498,33 +534,33 @@ void mpdc_update(const char *abs_dir)
 
 static int add_batch(struct mpd_connection *c, char *const *uris, int n, bool *ok)
 {
-	int added = 0;
+	int added = 0, i = 0;
 
-	for (int i = 0; i < n; i += BATCH) {
-		int m = n - i < BATCH ? n - i : BATCH;
+	while (i < n) {
+		int m = n - i < BATCH ? n - i : BATCH, done = m;
 		mpd_command_list_begin(c, false);
 		for (int j = 0; j < m; j++)
 			mpd_send_add(c, uris[i + j]);
 		mpd_command_list_end(c);
-		if (mpd_response_finish(c)) {
-			for (int j = 0; j < m; j++)
-				ok[i + j] = true;
-			added += m;
-			continue;
-		}
-		mpdc_check("add");
-		for (int j = 0; j < m; j++) {
-			ok[i + j] = mpd_run_add(c, uris[i + j]);
-			if (ok[i + j])
-				added++;
-			else
+		if (!mpd_response_finish(c)) {
+			if (mpd_connection_get_error(c) != MPD_ERROR_SERVER) {
 				mpdc_check("add");
+				break;
+			}
+			done = (int)mpd_connection_get_server_error_location(c);
+			if (done >= m)
+				done = m - 1;
+			mpdc_check("add");
 		}
+		for (int j = 0; j < done; j++)
+			ok[i + j] = true;
+		added += done;
+		i += done < m ? done + 1 : m;
 	}
 	return added;
 }
 
-static void remember_queue(const char *o)
+unsigned mpdc_set_origin(const char *o)
 {
 	struct mpd_connection *c = mpdc();
 	struct mpd_status *s;
@@ -535,6 +571,7 @@ static void remember_queue(const char *o)
 		expected_queue_version = mpd_status_get_queue_version(s);
 		mpd_status_free(s);
 	}
+	return expected_queue_version;
 }
 
 int mpdc_play_uris(char *const *uris, int n, int start, const char *o)
@@ -552,8 +589,11 @@ int mpdc_play_uris(char *const *uris, int n, int start, const char *o)
 	for (int i = 0; i < start && i < n; i++)
 		pos += ok[i];
 	free(ok);
-	remember_queue(o);
-	mpd_run_play_pos(c, pos);
+	mpdc_set_origin(o);
+	if (start < 0)
+		mpd_run_play(c);
+	else
+		mpd_run_play_pos(c, pos);
 	return mpdc_check("play") ? 0 : -1;
 }
 
@@ -620,7 +660,7 @@ bool mpdc_sort_queue(const char *criteria)
 	ok = queue_reorder(&q);
 	if (ok && loaded[0])
 		ok = playlist_rewrite(loaded, &q);
-	remember_queue(o);
+	mpdc_set_origin(o);
 	items_free(&q);
 	return ok;
 }
@@ -676,6 +716,11 @@ bool mpdc_queue_delete(int pos)
 	return mpdc() && mpd_run_delete(cmd, pos) ? true : mpdc_check("delete");
 }
 
+bool mpdc_queue_delete_range(int start, int end)
+{
+	return mpdc() && mpd_run_delete_range(cmd, start, end) ? true : mpdc_check("delete");
+}
+
 bool mpdc_queue_move(int from, int to)
 {
 	return mpdc() && mpd_run_move(cmd, from, to) ? true : mpdc_check("move");
@@ -684,7 +729,7 @@ bool mpdc_queue_move(int from, int to)
 bool mpdc_queue_clear(void)
 {
 	bool r = mpdc() && mpd_run_clear(cmd) ? true : mpdc_check("clear");
-	remember_queue("");
+	mpdc_set_origin("");
 	return r;
 }
 
@@ -867,7 +912,7 @@ bool mpdc_playlist_play(const char *name, int pos)
 	if (!mpd_run_load(c, name))
 		return mpdc_check("load");
 	snprintf(buf, sizeof(buf), "playlist:%s", name);
-	remember_queue(buf);
+	mpdc_set_origin(buf);
 	snprintf(key, sizeof(key), "pl.mode.%s", name);
 	mode = state_get(key);
 	if (mode && *mode)
@@ -927,37 +972,195 @@ void mpdc_playlist_name_for(char *out, size_t len, const char *rel)
 	free(names);
 }
 
-int mpdc_list_tag(enum mpd_tag_type tag, enum mpd_tag_type ftag, const char *filter, char ***out)
+void names_free(struct names *nm)
+{
+	for (int i = 0; i < nm->n; i++) {
+		free(nm->v[i]);
+		free(nm->key[i]);
+	}
+	free(nm->v);
+	free(nm->key);
+	memset(nm, 0, sizeof(*nm));
+}
+
+static const struct names *sort_names;
+
+static int cmp_name_key(const void *a, const void *b)
+{
+	int x = *(const int *)a, y = *(const int *)b, c = strcmp(sort_names->v[x], sort_names->v[y]);
+	return c ? c : nat_cmp(sort_names->key[x], sort_names->key[y]);
+}
+
+static int cmp_key(const void *a, const void *b)
+{
+	int x = *(const int *)a, y = *(const int *)b, c = nat_cmp(sort_names->key[x], sort_names->key[y]);
+	return c ? c : nat_cmp(sort_names->v[x], sort_names->v[y]);
+}
+
+static void names_order(struct names *nm)
+{
+	int *idx = malloc((nm->n + 1) * sizeof(int)), k = 0;
+	char **v = malloc((nm->n + 1) * sizeof(char *)), **key = malloc((nm->n + 1) * sizeof(char *));
+
+	for (int i = 0; i < nm->n; i++)
+		idx[i] = i;
+	sort_names = nm;
+	qsort(idx, nm->n, sizeof(int), cmp_name_key);
+	for (int i = 0; i < nm->n; i++) {
+		if (k && !strcmp(nm->v[idx[i]], nm->v[idx[k - 1]])) {
+			free(nm->v[idx[i]]);
+			free(nm->key[idx[i]]);
+			continue;
+		}
+		idx[k++] = idx[i];
+	}
+	qsort(idx, k, sizeof(int), cmp_key);
+	for (int i = 0; i < k; i++) {
+		v[i] = nm->v[idx[i]];
+		key[i] = nm->key[idx[i]];
+	}
+	free(nm->v);
+	free(nm->key);
+	free(idx);
+	nm->v = v;
+	nm->key = key;
+	nm->n = k;
+}
+
+int mpdc_list_tag(enum mpd_tag_type tag, enum mpd_tag_type sort_tag, const char *expr, struct names *out)
 {
 	struct mpd_connection *c = mpdc();
 	struct mpd_pair *p;
-	char **v = NULL;
-	int n = 0;
+	const char *name = mpd_tag_name(tag);
+	char key[512] = "";
+	int cap = 0;
 
-	*out = NULL;
+	memset(out, 0, sizeof(*out));
 	if (!c || !mpd_search_db_tags(c, tag))
 		return mpdc_check("list"), -1;
-	if (filter)
-		mpd_search_add_tag_constraint(c, MPD_OPERATOR_DEFAULT, ftag, filter);
+	if (expr)
+		mpd_search_add_expression(c, expr);
+	if (sort_tag != MPD_TAG_UNKNOWN)
+		mpd_search_add_group_tag(c, sort_tag);
 	if (!mpd_search_commit(c))
 		return mpdc_check("list"), -1;
-	while ((p = mpd_recv_pair_tag(c, tag))) {
-		if (p->value[0]) {
-			v = realloc(v, (n + 1) * sizeof(char *));
-			v[n++] = strdup(p->value);
+	while ((p = mpd_recv_pair(c))) {
+		if (strcasecmp(p->name, name)) {
+			snprintf(key, sizeof(key), "%s", p->value);
+		} else if (p->value[0]) {
+			if (out->n == cap) {
+				cap = cap ? cap * 2 : 64;
+				out->v = realloc(out->v, cap * sizeof(char *));
+				out->key = realloc(out->key, cap * sizeof(char *));
+			}
+			out->v[out->n] = strdup(p->value);
+			out->key[out->n++] = strdup(key[0] ? key : p->value);
 		}
 		mpd_return_pair(c, p);
 	}
-	if (!mpdc_check("list"))
+	if (!mpdc_check("list")) {
+		names_free(out);
 		return -1;
-	*out = v;
-	return n;
+	}
+	if (out->n)
+		names_order(out);
+	return out->n;
 }
 
-static int cmp_track(const void *a, const void *b)
+void albums_free(struct albums *a)
+{
+	for (int i = 0; i < a->n; i++) {
+		free(a->v[i].name);
+		free(a->v[i].artist);
+	}
+	free(a->v);
+	memset(a, 0, sizeof(*a));
+}
+
+static int cmp_album_id(const void *a, const void *b)
+{
+	const struct album *x = a, *y = b;
+	int c = strcmp(x->name, y->name);
+	return c ? c : strcmp(x->artist, y->artist);
+}
+
+static bool list_albums(struct mpd_connection *c, const char *expr, struct albums *out)
+{
+	struct mpd_pair *p;
+	char artist[512] = "";
+	int year = 0;
+
+	if (!mpd_search_db_tags(c, MPD_TAG_ALBUM))
+		return false;
+	if (expr)
+		mpd_search_add_expression(c, expr);
+	mpd_search_add_group_tag(c, MPD_TAG_DATE);
+	mpd_search_add_group_tag(c, MPD_TAG_ALBUM_ARTIST);
+	if (!mpd_search_commit(c))
+		return false;
+	while ((p = mpd_recv_pair(c))) {
+		if (!strcasecmp(p->name, "AlbumArtist")) {
+			snprintf(artist, sizeof(artist), "%s", p->value);
+		} else if (!strcasecmp(p->name, "Date")) {
+			year = year_of(p->value);
+		} else if (!strcasecmp(p->name, "Album") && p->value[0]) {
+			if (out->n == out->cap) {
+				out->cap = out->cap ? out->cap * 2 : 64;
+				out->v = realloc(out->v, out->cap * sizeof(*out->v));
+			}
+			out->v[out->n++] = (struct album){ strdup(p->value), strdup(artist), year };
+		}
+		mpd_return_pair(c, p);
+	}
+	return mpd_connection_get_error(c) == MPD_ERROR_SUCCESS;
+}
+
+int mpdc_albums(const char *const *exprs, int n_exprs, struct albums *out)
+{
+	struct mpd_connection *c = mpdc();
+	int k = 0;
+
+	memset(out, 0, sizeof(*out));
+	for (int i = 0; i < n_exprs; i++)
+		if (!c || !list_albums(c, exprs[i], out)) {
+			mpdc_check("list");
+			albums_free(out);
+			return -1;
+		}
+	if (out->n > 1)
+		qsort(out->v, out->n, sizeof(*out->v), cmp_album_id);
+	for (int i = 0; i < out->n; i++) {
+		struct album *a = &out->v[i];
+		if (k && !cmp_album_id(a, &out->v[k - 1])) {
+			struct album *keep = &out->v[k - 1];
+			if (a->year && (!keep->year || a->year < keep->year))
+				keep->year = a->year;
+			free(a->name);
+			free(a->artist);
+			continue;
+		}
+		out->v[k++] = *a;
+	}
+	out->n = k;
+	return k;
+}
+
+const char *item_album_artist(const struct item *it)
+{
+	return it->albumartist[0] ? it->albumartist : it->artist;
+}
+
+static int cmp_album_order(const void *a, const void *b)
 {
 	const struct item *x = a, *y = b;
+	int c = nat_cmp(item_album_artist(x), item_album_artist(y));
 
+	if (c)
+		return c;
+	if (x->year != y->year)
+		return x->year < y->year ? -1 : 1;
+	if ((c = nat_cmp(x->album, y->album)))
+		return c;
 	if (x->disc != y->disc)
 		return x->disc < y->disc ? -1 : 1;
 	if (x->track != y->track)
@@ -965,7 +1168,7 @@ static int cmp_track(const void *a, const void *b)
 	return nat_cmp(x->uri, y->uri);
 }
 
-int mpdc_find(enum mpd_tag_type t1, const char *v1, enum mpd_tag_type t2, const char *v2, struct items *out)
+int mpdc_songs(const char *expr, const char *sort, unsigned window, struct items *out)
 {
 	struct mpd_connection *c = mpdc();
 	struct mpd_song *s;
@@ -973,20 +1176,23 @@ int mpdc_find(enum mpd_tag_type t1, const char *v1, enum mpd_tag_type t2, const 
 	memset(out, 0, sizeof(*out));
 	if (!c || !mpd_search_db_songs(c, true))
 		return mpdc_check("find"), -1;
-	if (v1)
-		mpd_search_add_tag_constraint(c, MPD_OPERATOR_DEFAULT, t1, v1);
-	if (v2)
-		mpd_search_add_tag_constraint(c, MPD_OPERATOR_DEFAULT, t2, v2);
+	mpd_search_add_expression(c, expr);
+	if (sort)
+		mpd_search_add_sort_name(c, sort[0] == '-' ? sort + 1 : sort, sort[0] == '-');
+	if (window)
+		mpd_search_add_window(c, 0, window);
 	if (!mpd_search_commit(c))
 		return mpdc_check("find"), -1;
 	while ((s = mpd_recv_song(c))) {
 		items_add(out, s);
 		mpd_song_free(s);
 	}
-	if (!mpdc_check("find"))
+	if (!mpdc_check("find")) {
+		items_free(out);
 		return -1;
-	if (out->n > 1)
-		qsort(out->v, out->n, sizeof(struct item), cmp_track);
+	}
+	if (!sort && out->n > 1)
+		qsort(out->v, out->n, sizeof(struct item), cmp_album_order);
 	return out->n;
 }
 

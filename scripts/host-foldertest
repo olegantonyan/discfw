@@ -1,0 +1,159 @@
+#!/bin/sh
+# Folder playback regression test on the host: a real MPD (null output) and the headless discui, driven through its
+# debug socket. Covers start track, rejected files, play through folders (chain, stale state, wrap, stop), recursive
+# order and shuffle. Needs mpd, mpc, socat, ffmpeg. Usage: scripts/host-foldertest
+set -e
+TOP=$(cd "$(dirname "$0")/.." && pwd)
+UI=$TOP/output/host-discfw/src/discui/discui
+[ -x "$UI" ] || "$TOP/scripts/host-build" discui >/dev/null
+W=$(mktemp -d)
+R=$(mktemp -d -p "${XDG_RUNTIME_DIR:-/tmp}" dft.XXXX)
+M=$W/music
+pass=0
+fail=0
+uipid=
+
+cleanup() {
+	[ -n "$uipid" ] && kill "$uipid" 2>/dev/null
+	mpd --kill "$W/mpd.conf" 2>/dev/null || true
+	rm -rf "$W" "$R"
+}
+trap cleanup EXIT INT TERM
+
+m() { mpc -q -h "$R/mpd.sock" "$@"; }
+q() { mpc -h "$R/mpd.sock" -f %file% playlist | tr '\n' ' ' | sed 's/ $//'; }
+cur() { mpc -h "$R/mpd.sock" -f %file% current; }
+ui() { printf '%s\n' "$*" | socat -t3 - "UNIX-CONNECT:$R/discui.sock" >/dev/null; sleep 0.4; }
+check() {
+	if [ "$2" = "$3" ]; then
+		pass=$((pass + 1))
+		echo "PASS $1"
+	else
+		fail=$((fail + 1))
+		echo "FAIL $1"
+		echo "  got:  $2"
+		echo "  want: $3"
+	fi
+}
+wait_cur() {
+	i=0
+	while [ "$(cur)" != "$1" ] && [ $i -lt 40 ]; do
+		sleep 0.25
+		i=$((i + 1))
+	done
+}
+tone() {
+	mkdir -p "$(dirname "$M/$1")"
+	ffmpeg -nostdin -loglevel error -f lavfi -i "sine=frequency=440:duration=${2:-1.5}" -ac 2 -c:a flac "$M/$1"
+}
+
+for f in A/1 A/2 A/10 B/1 B/2 C/x C/y D/D1/1 D/D2/1 E/1 F/1 G/1 H/1 I/1 J/1 R/r1 R/r2 R/s2/1 R/s10/1 Z/1; do
+	tone "$f.flac"
+done
+for i in 1 2 3 4 5 6 7 8; do tone "S/$i.flac" 30; done
+printf 'not audio' > "$M/C/bad.alac"
+
+mkdir -p "$W/data/mpd/playlists"
+cat > "$W/mpd.conf" <<EOF
+music_directory "$M"
+playlist_directory "$W/data/mpd/playlists"
+database {
+	plugin "simple"
+	path "$W/data/mpd/database"
+}
+pid_file "$R/mpd.pid"
+bind_to_address "$R/mpd.sock"
+log_file "$W/mpd.log"
+auto_update "no"
+audio_output {
+	type "null"
+	name "null"
+	sync "yes"
+}
+EOF
+mpd "$W/mpd.conf" 2>/dev/null
+m update --wait
+tone R/s3/1.flac
+
+start_ui() {
+	[ -n "$uipid" ] && kill "$uipid" && wait "$uipid" 2>/dev/null || true
+	printf '%s\n' "$@" > "$W/data/settings"
+	DISC_RUN_DIR=$R DISC_DATA_DIR=$W/data DISC_MUSIC_ROOT=$M DISCUI_ROTATE=0 ASAN_OPTIONS=detect_leaks=0 \
+		"$UI" --host > "$W/discui.log" 2>&1 &
+	uipid=$!
+	i=0
+	while [ ! -S "$R/discui.sock" ] && [ $i -lt 40 ]; do
+		sleep 0.25
+		i=$((i + 1))
+	done
+	sleep 1
+}
+row() { echo $((86 + 48 * $1)); }
+play_row() {
+	m stop
+	m clear
+	ui folder "$M/$1"
+	ui tap 180 "$(row "$2")"
+	sleep 0.6
+}
+
+start_ui play.order=seq play.through_folders=1 play.recursive=0
+
+play_row A 2
+check "start track" "$(cur)" "A/10.flac"
+check "next folder queued on the last track" "$(q)" "A/1.flac A/2.flac A/10.flac B/1.flac B/2.flac"
+wait_cur B/1.flac
+sleep 0.5
+check "crossing trims the played folder" "$(q)" "B/1.flac B/2.flac"
+
+play_row A 2
+play_row C 2
+check "rejected file: no duplicates, tapped track plays" "$(cur)" "C/y.flac"
+check "a new folder after a pending crossing still continues" "$(q)" "C/x.flac C/y.flac D/D1/1.flac"
+wait_cur D/D1/1.flac
+sleep 0.5
+check "folder without files: into its first subfolder" "$(q)" "D/D1/1.flac D/D2/1.flac"
+wait_cur D/D2/1.flac
+sleep 0.5
+check "chain continues" "$(q)" "D/D2/1.flac E/1.flac"
+
+play_row Z 0
+check "end of card wraps in Sequential" "$(q)" "Z/1.flac A/1.flac A/2.flac A/10.flac"
+
+start_ui play.order=noloop play.through_folders=1 play.recursive=0
+play_row Z 0
+sleep 2.5
+check "end of card stops in Sequential, no loop" "$(q) $(mpc -h "$R/mpd.sock" status | grep -c playing)" "Z/1.flac 0"
+
+start_ui play.order=seq play.through_folders=0 play.recursive=0
+play_row B 1
+check "setting off: folder only" "$(q)" "B/1.flac B/2.flac"
+
+start_ui play.order=seq play.through_folders=1 play.recursive=1
+m stop
+m clear
+ui folder "$M/R"
+ui tap 180 41
+ui tap 180 87
+check "recursive order: files, then subfolders in natural order, unscanned included" "$(q)" \
+	"R/r1.flac R/r2.flac R/s2/1.flac $R/sdfile/R/s3/1.flac R/s10/1.flac"
+
+firsts=
+for i in 1 2 3 4 5 6; do
+	m stop
+	m clear
+	ui folder "$M/S"
+	ui tap 180 41
+	ui tap 180 139
+	firsts="$firsts $(cur)"
+done
+check "shuffle starts at a random track" "$(echo "$firsts" | tr ' ' '\n' | grep -v '^$' | sort -u | wc -l | tr -d ' ' | sed 's/^[2-9]$/varied/')" varied
+check "shuffle sets random" "$(mpc -h "$R/mpd.sock" status | grep -o 'random: on')" "random: on"
+
+if grep -qE "ERROR: AddressSanitizer|runtime error" "$W/discui.log"; then
+	fail=$((fail + 1))
+	echo "FAIL sanitizers"
+	grep -E "ERROR: AddressSanitizer|runtime error" "$W/discui.log" | head -5
+fi
+echo "$pass passed, $fail failed"
+[ "$fail" = 0 ]

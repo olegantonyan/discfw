@@ -381,70 +381,15 @@ static void song_info(void)
 	ui_info("Song info", buf);
 }
 
-static void go_to_folder(void)
-{
-	char *path = app.mpd.cur.uri[0] ? mpdc_path_for_uri(app.mpd.cur.uri) : NULL, *slash;
-
-	if (!path)
-		return;
-	slash = strrchr(path, '/');
-	if (slash) {
-		*slash = 0;
-		folders_open_at(path, slash + 1);
-	}
-	free(path);
-}
-
-struct add_ctx {
-	char uri[1024];
-	char **names;
-	int n;
-};
-
-static void add_named(const char *text, void *ctx)
-{
-	struct add_ctx *a = ctx;
-	char *u = a->uri;
-
-	if (text[0] && mpdc_playlist_append(text, &u, 1) > 0)
-		ui_toast("Added");
-	for (int i = 0; i < a->n; i++)
-		free(a->names[i]);
-	free(a->names);
-	free(a);
-}
-
-static void add_picked(int idx, void *ctx)
-{
-	struct add_ctx *a = ctx;
-
-	if (idx == 0) {
-		ui_text_input("New playlist", "", false, add_named, a);
-		return;
-	}
-	add_named(a->names[idx - 1], a);
-}
-
 static void add_to_playlist(void)
 {
-	struct add_ctx *a;
-	const char **items;
+	char *u = app.mpd.cur.uri;
 
-	if (!app.mpd.cur.uri[0] || !strncmp(app.mpd.cur.uri, "file://", 7) || app.mpd.cur.uri[0] == '/') {
+	if (!u[0] || !strncmp(u, "file://", 7) || u[0] == '/') {
 		ui_toast("Song not in library yet");
 		return;
 	}
-	a = calloc(1, sizeof(*a));
-	snprintf(a->uri, sizeof(a->uri), "%s", app.mpd.cur.uri);
-	a->n = mpdc_playlists(&a->names);
-	if (a->n < 0)
-		a->n = 0;
-	items = calloc(a->n + 1, sizeof(char *));
-	items[0] = LV_SYMBOL_PLUS " New playlist…";
-	for (int i = 0; i < a->n; i++)
-		items[i + 1] = a->names[i];
-	ui_menu("Add to playlist", items, a->n + 1, add_picked, a);
-	free(items);
+	playlist_add_uris(&u, 1, "");
 }
 
 static void menu_picked(int idx, void *ctx)
@@ -467,7 +412,7 @@ static void menu_picked(int idx, void *ctx)
 		add_to_playlist();
 		break;
 	case 3:
-		go_to_folder();
+		folders_open_uri(app.mpd.cur.uri);
 		break;
 	case 4:
 		song_info();
