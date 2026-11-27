@@ -15,6 +15,7 @@
 #define QLEN 16
 #define SLOP 12
 #define SIDE_LIMIT 120
+#define HOLD_MS 250
 
 struct sample {
 	int16_t x, y;
@@ -31,6 +32,7 @@ static struct {
 } raw;
 static enum gstate gs;
 static int gx, gy;
+static uint32_t gt;
 static bool rot180 = true;
 static bool (*back_cb)(void);
 static lv_obj_t *bulge, *bulge_arrow;
@@ -54,6 +56,10 @@ static void push(int x, int y, bool pressed)
 static void read_cb(lv_indev_t *indev, lv_indev_data_t *d)
 {
 	(void)indev;
+	if ((gs == G_PEND_BACK || gs == G_PEND_SHADE || gs == G_PEND_UP) && lv_tick_elaps(gt) >= HOLD_MS) {
+		push(gx, gy, true);
+		gs = G_PASS;
+	}
 	if (qhead != qtail) {
 		last = q[qhead];
 		qhead = (qhead + 1) % QLEN;
@@ -126,6 +132,7 @@ static void gesture(int x, int y, bool pressed)
 			return;
 		gx = x;
 		gy = y;
+		gt = lv_tick_get();
 		if (app.sys.locked)
 			gs = G_PASS;
 		else if (in_left_zone(x, y))

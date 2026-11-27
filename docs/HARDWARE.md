@@ -70,7 +70,7 @@ FiiO's update files are signed (ECDSA P-256), so the normal updater does not ins
 
 - Path: AS-DMA channel 3 → I2S3 (BAIC3) → both DACs. ALSA device `hw:0,3`, `S32_LE`, 2 channels. The route `LO3_MUX = LI11` must be set (all routes are unused at boot).
 - The SoC is the I2S master: BCLK = 64 × sample rate, running only during a stream. Each DAC makes its own master clock from a 22.5792 MHz crystal with its PLL.
-- The two CS43131 are in mono mode: one chip per channel, each driving its A/B outputs as + and −. This gives the 4.4 mm balanced output; the 3.5 mm output is single-ended. The stock software detects which plug is in with the SoC's ADC.
+- The two CS43131 are in mono mode: one chip per channel, each driving its A/B outputs as + and −. This gives the 4.4 mm balanced output; the 3.5 mm output is single-ended. The 3.5 mm plug detect is GPIO PB20 (high while a plug is in); the stock software checks the 4.4 mm plug with the SoC's ADC.
 - S/PDIF (coaxial) out: the SoC's own transmitter on PC14 shares the 3.5 mm jack; it is usable while the DAC amps are off.
 - DAC GPIOs: PA12 reset, PB05 analog mute, PB08 DAC power, PB09 and PB12 output amplifier enable. The stock driver owns them.
 - PCM from 32 kHz to 384 kHz. The DACs also support DSD; discfw does not use it.

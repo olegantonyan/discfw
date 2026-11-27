@@ -5,8 +5,8 @@ DESTDIR ?=
 
 all: discd discctl discreset discuac libdisc_hook.so
 
-discd: discd.c power.c power.h cs43131_ioctl.h
-	$(CC) $(CFLAGS) -o $@ discd.c power.c $(LDFLAGS) -ldisc
+discd: discd.c power.c power.h jack.c jack.h cs43131_ioctl.h
+	$(CC) $(CFLAGS) -o $@ discd.c power.c jack.c $(LDFLAGS) -ldisc
 
 discctl: discctl.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -ldisc

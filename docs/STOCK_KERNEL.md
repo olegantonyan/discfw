@@ -150,7 +150,7 @@ The kernel has a full Type-C and PD stack with sysfs files in `/sys/bus/i2c/devi
 
 ## ADC: jack and USB detection
 
-`/dev/jz_adc_aux_0..5` (`soc_adc.ko`). Stock thresholds: 4.4 mm plug on channel 1 at 1501 mV (hysteresis bands 149/199), 3.5 mm plug at 501/100, USB power at 80. **Open:** the mapping of the other channels and the threshold units. discfw does not read the ADC yet.
+`/dev/jz_adc_aux_0..5` (`soc_adc.ko`); `read()` returns one 32-bit sample, apparently in mV (idle: 0, 1641, 1242, 565, 432, 548). Stock thresholds: 4.4 mm plug on channel 1 at 1501 mV (hysteresis bands 149/199), 3.5 mm plug at 501/100, USB power at 80. Plugging a 3.5 mm plug changes none of the six channels: **the 3.5 mm plug is GPIO PB20** (high while a plug is in), which discd reads from the GPIO registers through `/dev/mem`. The CS43131's own headphone detect is off in PCM mode (`HP_DETECT=0x04`). **Open:** the 4.4 mm plug (channel 1, untested) and the other channels.
 
 ## Reboot: watchdog reset
 

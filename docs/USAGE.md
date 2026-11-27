@@ -43,7 +43,7 @@ discfw reset KEY
 discfw cfg KEY            # read the file directly, without the daemon
 ```
 
-These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folders`, `audio.pause_bt_loss`, `audio.pause_jack_out`, `lib.playlist_sort`, `bt.autoreconnect`, `power.<profile>.wifi_idle_min`, `power.<profile>.bt_idle_min`.
+These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folders`, `audio.pause_bt_loss`, `lib.playlist_sort`, `bt.autoreconnect`, `power.<profile>.wifi_idle_min`, `power.<profile>.bt_idle_min`.
 
 ## Music and library
 
@@ -110,6 +110,8 @@ discctl status | rate HZ | mute | unmute | release | vol 0..255|+|- | volpct 0..
 ```
 
 `vol` is attenuation in 0.5 dB steps. `release` mutes after 500 ms unless a new stream unmutes first. `audio.balance`, `audio.filter` and `audio.dre` use the stock driver's ioctls (applied only after you change them from the default). `audio.dac_idle_off` powers the DAC down after that many seconds of idle (experimental).
+
+Unplugging the 3.5 mm plug pauses playback (`audio.pause_jack_out`, on by default); plugging it back in does not resume. It applies to the jack output only, not to Bluetooth. The 4.4 mm jack is not detected yet. `discctl status` shows `jack=1` while a 3.5 mm plug is in.
 
 ALSA test: `aplay -D disc FILE.wav`, `speaker-test -D disc -c 2 -r 44100 -F S32_LE`.
 

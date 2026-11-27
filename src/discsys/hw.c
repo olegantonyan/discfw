@@ -1,7 +1,9 @@
 #include "discsys.h"
 
 #include <disc/conn.h>
+#include <disc/settings.h>
 #include <glib-unix.h>
+#include <mpd/client.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -51,11 +53,24 @@ static void parse_bat(const char *line)
 	mode_on_bat();
 }
 
+static void on_jack(bool plugged)
+{
+	struct mpd_connection *c;
+
+	if (plugged || sys.mode != MODE_PLAYER || sys.output != OUT_DAC || sys.play != PS_PLAY || !set_get_bool("audio.pause_jack_out"))
+		return;
+	logmsg(LOG_INFO, "headphones unplugged, pausing");
+	if ((c = mpdc()) && !mpd_run_pause(c, true))
+		mpdc_report("pause");
+}
+
 static void on_line(struct lconn *c, char *line, void *arg)
 {
 	(void)c;
 	(void)arg;
-	if (!strncmp(line, "!bat", 4)) {
+	if (!strncmp(line, "!jack", 5)) {
+		on_jack(kv_get_int(line, "plugged", 1));
+	} else if (!strncmp(line, "!bat", 4)) {
 		parse_bat(line);
 		struct kvbuf b;
 		kv_init(&b);

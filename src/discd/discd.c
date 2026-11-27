@@ -1,4 +1,5 @@
 #include "cs43131_ioctl.h"
+#include "jack.h"
 #include "power.h"
 
 #include <disc/conn.h>
@@ -23,6 +24,7 @@
 #define VOL_MUTE 0xff
 #define RELEASE_MS 500
 #define POWER_TICK_MS 5000
+#define JACK_TICK_MS 250
 #define MAX_CLIENTS 16
 #define CLIENT_IDLE_MS 5000
 #define OUT_MAX 65536
@@ -198,6 +200,7 @@ static void dac_status(struct kvbuf *b)
 	kv_int(b, "balance", balance);
 	kv_int(b, "off", powered_down);
 	kv_int(b, "spdif", spdif);
+	kv_int(b, "jack", jack_state());
 }
 
 static void apply_spdif(void)
@@ -270,6 +273,15 @@ static void event_dac(void)
 	kv_end(&b);
 	broadcast(b.s);
 	kv_free(&b);
+}
+
+static void event_jack(void)
+{
+	char line[32];
+
+	syslog(LOG_INFO, "headphones %s", jack_state() ? "plugged in" : "unplugged");
+	snprintf(line, sizeof(line), "!jack plugged=%d\n", jack_state());
+	broadcast(line);
 }
 
 static void reload(void)
@@ -413,13 +425,15 @@ static void timers(void)
 static void serve(int lfd)
 {
 	struct pollfd pfd[MAX_CLIENTS + 1];
-	long long tick_at = now_ms() + POWER_TICK_MS;
+	long long tick_at = now_ms() + POWER_TICK_MS, jack_at = now_ms() + JACK_TICK_MS;
 
 	for (;;) {
 		struct client *map[MAX_CLIENTS + 1];
 		long long now = now_ms(), wait = tick_at - now;
 		int n = 1;
 
+		if (jack_state() >= 0 && jack_at - now < wait)
+			wait = jack_at - now;
 		if (release_at && release_at - now < wait)
 			wait = release_at - now;
 		if (off_at && off_at - now < wait)
@@ -452,6 +466,11 @@ static void serve(int lfd)
 		if (pfd[0].revents & POLLIN)
 			accept_client(lfd);
 		timers();
+		if (now_ms() >= jack_at) {
+			if (jack_tick())
+				event_jack();
+			jack_at = now_ms() + JACK_TICK_MS;
+		}
 		if (now_ms() >= tick_at) {
 			if (power_tick())
 				event_bat();
@@ -484,6 +503,7 @@ int main(void)
 	resume_running_stream();
 	apply_spdif();
 	power_init();
+	jack_init();
 	lfd = unix_listen(DISCD_SOCK, 0666);
 	if (lfd < 0) {
 		syslog(LOG_ERR, "socket: %m");

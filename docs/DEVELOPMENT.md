@@ -122,7 +122,7 @@ From 2026-11-25, before the current UI and discsys. They need to be measured aga
 ## Roadmap
 
 - **USB DAC:** native DSD (the gadget's alt setting 2) and DoP.
-- **Jack status** from the ADC; equalizer; the settings that do nothing yet ([USAGE.md](USAGE.md#settings)).
+- **4.4 mm plug detect** from the ADC (channel 1, untested); equalizer; the settings that do nothing yet ([USAGE.md](USAGE.md#settings)).
 - **Power:** radios off when not used, DAC low power when idle (`audio.dac_idle_off`, experimental), measure the battery current.
 - **Measure again** skip latency, boot time and memory with the current UI.
 - **Ideas the open user space allows:** audio streaming over the network (RTP), more Bluetooth codecs (bluez-alsa supports AAC and LDAC, among others), more MPD plugins.
