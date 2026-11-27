@@ -107,6 +107,7 @@ static void announce(void)
 	kv_raw(&b, "!mount");
 	kv_int(&b, "sd", mounted);
 	ev_kv(&b);
+	eq_apply();
 }
 
 static gboolean on_mounts(gint fd, GIOCondition cond, gpointer data)

@@ -254,11 +254,14 @@ static void headset_set(const char *name, int bat)
 	static bool warned;
 	struct kvbuf b;
 	char msg[96];
+	bool renamed = strcmp(name, sys.bt_name);
 
-	if (!strcmp(name, sys.bt_name) && bat == sys.bt_bat)
+	if (!renamed && bat == sys.bt_bat)
 		return;
 	snprintf(sys.bt_name, sizeof(sys.bt_name), "%s", name);
 	sys.bt_bat = bat;
+	if (renamed)
+		eq_bt_changed();
 	kv_init(&b);
 	kv_raw(&b, "!bt");
 	kv_str(&b, "name", name);

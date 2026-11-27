@@ -58,11 +58,13 @@ static void load(struct dirlist *l, const char *path)
 	struct dirent *e;
 	int cap = 0;
 
+	bool root = !strcmp(path, disc_music_root());
+
 	l->path = strdup(path);
 	l->ok = d != NULL;
 	while (d && (e = readdir(d))) {
 		bool dir;
-		if (hidden(e->d_name))
+		if (hidden(e->d_name) || (root && !strcmp(e->d_name, "EQ")))
 			continue;
 		if (e->d_type == DT_DIR || e->d_type == DT_REG) {
 			dir = e->d_type == DT_DIR;

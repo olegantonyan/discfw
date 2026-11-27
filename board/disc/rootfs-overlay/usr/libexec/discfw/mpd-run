@@ -71,7 +71,7 @@ audio_output {
 audio_output {
 	type "alsa"
 	name "BT"
-	device "bluealsa"
+	device "disc_bt"
 	mixer_type "software"
 	enabled "no"
 }

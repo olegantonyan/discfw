@@ -427,11 +427,49 @@ static void text_closed(struct modal *m, int result)
 		((void (*)(const char *, void *))m->cb)(lv_textarea_get_text(m->ta), m->ctx);
 }
 
+static void kb_keys(lv_event_t *e)
+{
+	lv_obj_t *kb = lv_event_get_target_obj(e);
+	uint32_t id = lv_buttonmatrix_get_selected_button(kb);
+
+	if (id != LV_BUTTONMATRIX_BUTTON_NONE && !strcmp(lv_buttonmatrix_get_button_text(kb, id), "#+="))
+		lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
+	else
+		lv_keyboard_def_event_cb(e);
+}
+
 static void kb_event(lv_event_t *e)
 {
 	struct modal *m = lv_event_get_user_data(e);
 	modal_finish(m, lv_event_get_code(e) == LV_EVENT_READY ? 1 : 0);
 }
+
+#define KEY (LV_BUTTONMATRIX_CTRL_POPOVER | LV_BUTTONMATRIX_CTRL_CLICK_TRIG | 1)
+#define FN(w) (LV_KEYBOARD_CTRL_BUTTON_FLAGS | (w))
+#define BKSP (LV_BUTTONMATRIX_CTRL_CHECKED | 1)
+#define SPACE (LV_BUTTONMATRIX_CTRL_CLICK_TRIG | 5)
+#define GAP (LV_BUTTONMATRIX_CTRL_HIDDEN | LV_BUTTONMATRIX_CTRL_DISABLED | 2)
+
+static const char *const kb_lower[] = { "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
+					"a", "s", "d", "f", "g", "h", "j", "k", "l", LV_SYMBOL_BACKSPACE, "\n",
+					"z", "x", "c", "v", "b", "n", "m", ",", ".", "-", "\n",
+					" ", "ABC", "1#", " ", LV_SYMBOL_OK, " ", "" };
+static const char *const kb_upper[] = { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
+					"A", "S", "D", "F", "G", "H", "J", "K", "L", LV_SYMBOL_BACKSPACE, "\n",
+					"Z", "X", "C", "V", "B", "N", "M", ",", ".", "-", "\n",
+					" ", "abc", "1#", " ", LV_SYMBOL_OK, " ", "" };
+static const char *const kb_special[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
+					  "-", "_", "+", "=", "(", ")", "/", "'", "\"", LV_SYMBOL_BACKSPACE, "\n",
+					  "*", "!", "?", "&", "@", "#", "%", ",", ":", ";", "\n",
+					  " ", "abc", "#+=", " ", LV_SYMBOL_OK, " ", "" };
+static const char *const kb_more[] = { "[", "]", "{", "}", "<", ">", "$", "^", "~", "|", "\n",
+				       "\\", "`", "@", "#", "%", "&", "*", "+", "=", LV_SYMBOL_BACKSPACE, "\n",
+				       "_", "-", "/", ":", ";", "(", ")", "!", "?", ".", "\n",
+				       " ", "abc", "1#", " ", LV_SYMBOL_OK, " ", "" };
+static const lv_buttonmatrix_ctrl_t kb_ctrl[] = { KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY,
+						  KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY, BKSP,
+						  KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY, KEY,
+						  GAP, FN(3), FN(3), SPACE, FN(3), GAP };
 
 void ui_text_input(const char *title, const char *initial, bool secret, void (*cb)(const char *text, void *ctx), void *ctx)
 {
@@ -445,15 +483,25 @@ void ui_text_input(const char *title, const char *initial, bool secret, void (*c
 	lv_textarea_set_one_line(m->ta, true);
 	lv_textarea_set_password_mode(m->ta, secret);
 	lv_textarea_set_text(m->ta, initial ? initial : "");
-	lv_obj_set_width(m->ta, 240);
+	lv_obj_set_width(m->ta, 260);
 	lv_obj_set_style_text_font(m->ta, app.font.m, 0);
-	lv_obj_align(m->ta, LV_ALIGN_TOP_MID, 0, CONTENT_Y);
+	lv_obj_align(m->ta, LV_ALIGN_TOP_MID, 0, 58);
 	kb = lv_keyboard_create(m->root);
-	lv_obj_set_size(kb, 280, 176);
-	lv_obj_align(kb, LV_ALIGN_TOP_MID, 0, 112);
-	lv_obj_set_style_text_font(kb, &lv_font_montserrat_16, 0);
-	lv_obj_set_style_pad_all(kb, 2, 0);
-	lv_obj_set_style_pad_gap(kb, 3, 0);
+	lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_TEXT_LOWER, kb_lower, kb_ctrl);
+	lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_TEXT_UPPER, kb_upper, kb_ctrl);
+	lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_SPECIAL, kb_special, kb_ctrl);
+	lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, kb_more, kb_ctrl);
+	lv_obj_remove_event_cb(kb, lv_keyboard_def_event_cb);
+	lv_obj_add_event_cb(kb, kb_keys, LV_EVENT_VALUE_CHANGED, NULL);
+	lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_LOWER);
+	lv_keyboard_set_popovers(kb, true);
+	lv_obj_set_size(kb, 340, 200);
+	lv_obj_align(kb, LV_ALIGN_TOP_MID, 0, 102);
+	lv_obj_set_style_bg_opa(kb, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(kb, 0, 0);
+	lv_obj_set_style_text_font(kb, &lv_font_montserrat_20, 0);
+	lv_obj_set_style_pad_all(kb, 0, 0);
+	lv_obj_set_style_pad_gap(kb, 4, 0);
 	lv_keyboard_set_textarea(kb, m->ta);
 	lv_obj_add_event_cb(kb, kb_event, LV_EVENT_READY, m);
 	lv_obj_add_event_cb(kb, kb_event, LV_EVENT_CANCEL, m);
@@ -521,4 +569,105 @@ void ui_number_input(const char *title, int val, int min, int max, int step, con
 	lv_obj_add_event_cb(m->slider, number_slide, LV_EVENT_VALUE_CHANGED, m);
 	number_show(m);
 	two_buttons(m, "Cancel", "OK", 90, true);
+}
+
+struct spin {
+	ui_spin_cb cb;
+	void *ctx;
+	lv_obj_t *value, *caption;
+	int repeats;
+};
+
+static void spin_button(lv_event_t *e)
+{
+	lv_obj_t *b = lv_event_get_target_obj(e);
+	struct spin *s = lv_event_get_user_data(e);
+	int dir = (int)(intptr_t)lv_obj_get_user_data(b);
+
+	switch (lv_event_get_code(e)) {
+	case LV_EVENT_PRESSED:
+		s->repeats = 0;
+		break;
+	case LV_EVENT_LONG_PRESSED_REPEAT:
+		s->repeats++;
+		s->cb(lv_obj_get_parent(b), dir * (s->repeats > 30 ? 10 : s->repeats > 10 ? 5 : 1), s->ctx);
+		break;
+	case LV_EVENT_SHORT_CLICKED:
+		s->cb(lv_obj_get_parent(b), dir, s->ctx);
+		break;
+	default:
+		break;
+	}
+}
+
+static void spin_value(lv_event_t *e)
+{
+	struct spin *s = lv_event_get_user_data(e);
+
+	s->cb(lv_obj_get_parent(lv_event_get_target_obj(e)), 0, s->ctx);
+}
+
+static void spin_free(lv_event_t *e)
+{
+	free(lv_event_get_user_data(e));
+}
+
+static lv_obj_t *spin_arrow(lv_obj_t *col, struct spin *s, const char *sym, int dir, int width)
+{
+	lv_obj_t *b = lv_button_create(col), *l = lv_label_create(b);
+
+	lv_obj_set_size(b, width - 10, 40);
+	lv_obj_set_style_radius(b, 12, 0);
+	lv_obj_set_style_shadow_width(b, 0, 0);
+	lv_obj_set_style_bg_color(b, lv_color_hex(0x303030), 0);
+	lv_obj_set_style_bg_color(b, app.accent, LV_STATE_PRESSED);
+	lv_obj_set_user_data(b, (void *)(intptr_t)dir);
+	lv_label_set_text(l, sym);
+	lv_obj_set_style_text_font(l, app.font.icon, 0);
+	lv_obj_center(l);
+	lv_obj_add_event_cb(b, spin_button, LV_EVENT_PRESSED, s);
+	lv_obj_add_event_cb(b, spin_button, LV_EVENT_SHORT_CLICKED, s);
+	lv_obj_add_event_cb(b, spin_button, LV_EVENT_LONG_PRESSED_REPEAT, s);
+	return b;
+}
+
+lv_obj_t *ui_spin(lv_obj_t *parent, int width, bool tappable, ui_spin_cb cb, void *ctx)
+{
+	struct spin *s = calloc(1, sizeof(*s));
+	lv_obj_t *col = lv_obj_create(parent);
+
+	s->cb = cb;
+	s->ctx = ctx;
+	lv_obj_remove_style_all(col);
+	lv_obj_set_size(col, width, LV_SIZE_CONTENT);
+	lv_obj_set_scrollable(col, false);
+	lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_row(col, 6, 0);
+	lv_obj_set_user_data(col, s);
+	spin_arrow(col, s, LV_SYMBOL_PLUS, 1, width);
+	s->value = ui_label(col, app.font.m, "");
+	lv_obj_set_width(s->value, width);
+	lv_obj_set_style_text_align(s->value, LV_TEXT_ALIGN_CENTER, 0);
+	if (tappable) {
+		lv_obj_set_clickable(s->value, true);
+		lv_obj_set_style_text_color(s->value, app.accent, LV_STATE_PRESSED);
+		lv_obj_add_event_cb(s->value, spin_value, LV_EVENT_SHORT_CLICKED, s);
+	}
+	spin_arrow(col, s, LV_SYMBOL_MINUS, -1, width);
+	s->caption = ui_label(col, app.font.s, "");
+	lv_obj_set_width(s->caption, width);
+	lv_obj_set_style_text_align(s->caption, LV_TEXT_ALIGN_CENTER, 0);
+	lv_obj_set_style_text_color(s->caption, lv_color_hex(0x9a9a9a), 0);
+	lv_obj_add_event_cb(col, spin_free, LV_EVENT_DELETE, s);
+	return col;
+}
+
+void ui_spin_set(lv_obj_t *spin, const char *value, const char *caption)
+{
+	struct spin *s = lv_obj_get_user_data(spin);
+
+	lv_label_set_text(s->value, value);
+	if (caption)
+		lv_label_set_text(s->caption, caption);
 }

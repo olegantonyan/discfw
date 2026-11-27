@@ -51,6 +51,7 @@ Patches to packages:
 | Supervision | inittab `respawn` for `discd`, `discsys`, `mpd-run`, `uac-run`, `discui`, `discbt`, `guard`. discsys pings the UI every 5 s and kills it after 3 missed answers. Two UI crashes in 10 s → safe mode. | A crashed daemon restarts alone and rebuilds its state from MPD, discd and sysfs. There is no "kill everything" supervisor like stock's. |
 | System policy | `discsys` (GLib): buttons, screen power (backlight, `bl_power`, panel and touch sleep), power profiles, low battery, settings, volume, library scan policy, Wi-Fi, Bluetooth. Line protocol on `/run/discsys.sock`, command `discfw`. | Buttons, volume, power-off and screen timeouts keep working while the UI is dead or restarting. |
 | Audio | MPD → ALSA `disc` (a `hooks` PCM over `hw:0,3`) → `libdisc_hook.so` → `discd` | The hook sets the DAC rate and unmutes on `hw_params`, and sends `release` on `hw_free`/close. So any ALSA client gets the right DAC state, and reopening at the same rate never touches the DAC. MPD: `format "*:32:2"`, DAC rates in `allowed_formats` (others resample to 44.1 kHz), `period_time 40000`. |
+| Equalizer | ALSA `extplug` `disc_eq` (`libasound_module_pcm_disc_eq.so`) in front of every output: `disc` → `disc_dac` (the hooks PCM), `disc_spdif` → `disc_spdif_hw`, `disc_bt` → `bluealsa`. discsys resolves the preset for each output and writes it to `/run/eq.dac`, `eq.spdif`, `eq.bt`; the plugin checks the file 20 times a second of audio and applies changes live. Core in libdisc (`eq.c`: parser, RBJ biquads in double, auto preamp, DSP). | Covers MPD, `discuac` and BT without patching MPD. Format and channels pass through unchanged (S16, S24, S24_3, S32); no filters and 0 dB preamp copies bit-exact. Same filter count → coefficients swap with state kept; otherwise a 5 ms fade out and in. Tiny filter state is zeroed after each block: MIPS traps denormals into kernel emulation. |
 | DAC | `discd` keeps `/dev/cs43131` and `/dev/cs43131c` open, initialises once | Opening runs the full init. Rate change = rate on A, then on C. |
 | USB DAC bridge | `discuac`: a capture thread reads the gadget into a 1 s ring; the main thread opens `disc` (or `disc_spdif24`/`176`/`192`) at the measured rate and drops or repeats single frames to hold 30 ms of buffer | Opening the DAC at a new rate takes about 200 ms, longer than the gadget's capture buffer lasts at 384 kHz. Measured: 3 % CPU at 384 kHz; the test PC ran 244 ppm fast at both 44.1 and 48 kHz. |
 | Shutdown | `S95audio stop` pauses MPD (position kept), stops it, then powers the DAC down | no pop at power-off |
@@ -122,7 +123,8 @@ From 2026-11-25, before the current UI and discsys. They need to be measured aga
 ## Roadmap
 
 - **USB DAC:** native DSD (the gadget's alt setting 2) and DoP.
-- **4.4 mm plug detect** from the ADC (channel 1, untested); equalizer; the settings that do nothing yet ([USAGE.md](USAGE.md#settings)).
+- **4.4 mm plug detect** from the ADC (channel 1, untested); the settings that do nothing yet ([USAGE.md](USAGE.md#settings)).
+- **Equalizer:** measure its CPU cost at 44.1 and 384 kHz with 10 and 30 filters.
 - **Power:** radios off when not used, DAC low power when idle (`audio.dac_idle_off`, experimental), measure the battery current.
 - **Measure again** skip latency, boot time and memory with the current UI.
 - **Ideas the open user space allows:** audio streaming over the network (RTP), more Bluetooth codecs (bluez-alsa supports AAC and LDAC, among others), more MPD plugins.

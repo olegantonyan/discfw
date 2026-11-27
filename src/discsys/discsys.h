@@ -57,6 +57,10 @@ void cfg_list(struct kvbuf *out, const char *prefix);
 void state_init(void);
 int state_get_int(const char *key, int def);
 void state_set_int(const char *key, int val);
+const char *state_get_str(const char *key);
+void state_set_str(const char *key, const char *val);
+void state_del(const char *key);
+void state_rewrite(const char *prefix, const char *old, const char *val);
 void state_flush(void);
 
 void mpdc_init(void);
@@ -120,3 +124,9 @@ void power_off(bool reboot);
 const char *power_profile(void);
 int power_profile_int(const char *field);
 void power_status(struct kvbuf *b);
+
+void eq_init(void);
+void eq_apply(void);
+void eq_flush(void);
+void eq_bt_changed(void);
+int eq_command(const char *verb, const char *line, struct kvbuf *out, char *err, size_t errlen);

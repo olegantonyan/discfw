@@ -18,7 +18,7 @@ static struct entry {
 static int depth;
 static lv_obj_t *status;
 
-static const struct screen_ops *const all[] = { &scr_home, &scr_folders, &scr_np, &scr_queue, &scr_playlists, &scr_library, &scr_settings, &scr_wifi, &scr_bt };
+static const struct screen_ops *const all[] = { &scr_home, &scr_folders, &scr_np, &scr_queue, &scr_playlists, &scr_library, &scr_settings, &scr_wifi, &scr_bt, &scr_eq };
 
 static void remember(void)
 {

@@ -245,6 +245,18 @@ static void handle(struct client *cl, char *line)
 			err(cl, e);
 		else
 			ok(cl);
+	} else if (!strcmp(cmd, "eq")) {
+		char e[96] = "";
+		struct kvbuf out;
+		kv_init(&out);
+		if (eq_command(a1, line, &out, e, sizeof(e)))
+			err(cl, e);
+		else {
+			if (out.s)
+				lc_puts(&cl->c, out.s);
+			ok(cl);
+		}
+		kv_free(&out);
 	} else if (!strcmp(cmd, "mode")) {
 		char e[96];
 		if (mode_request(a1, a2, e, sizeof(e)))

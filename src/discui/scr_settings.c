@@ -31,7 +31,7 @@ enum kind { R_SET, R_ACTION, R_INFO, R_PAGE };
 
 enum action {
 	A_SCAN, A_RESCAN, A_LIB_RESET, A_STORAGE, A_USBDAC, A_REBOOT, A_POWEROFF, A_RESTART_UI, A_RESET_UI, A_RESET_SETTINGS, A_ZONE, A_PROFILE,
-	A_SLEEP, A_WIFI, A_BT
+	A_SLEEP, A_WIFI, A_BT, A_EQ
 };
 
 struct srow {
@@ -277,6 +277,10 @@ static void build(struct spage *p)
 		add_action(p, A_BT, "Devices", NULL);
 	if (!strcmp(p->id, "playback"))
 		add_action(p, A_SLEEP, app.sys.sleep_left ? "Sleep timer (running)" : "Sleep timer", NULL);
+	if (!strcmp(p->id, "audio")) {
+		add_action(p, A_EQ, "Equalizer", NULL);
+		eq_active_summary(p->rows[p->n - 1].sub, sizeof(p->rows[0].sub));
+	}
 	add_settings(p, p->id);
 	if (!strcmp(p->id, "power")) {
 		char line[64];
@@ -313,6 +317,7 @@ static void row(void *ctx, int idx, struct vrow *r)
 	case R_ACTION:
 	case R_PAGE:
 		snprintf(r->text, sizeof(r->text), "%s", s->text);
+		snprintf(r->sub, sizeof(r->sub), "%s", s->sub);
 		r->icon = LV_SYMBOL_RIGHT;
 		break;
 	}
@@ -506,6 +511,9 @@ static void click(void *ctx, int idx)
 	case A_BT:
 		nav_push(&scr_bt, NULL);
 		break;
+	case A_EQ:
+		nav_push(&scr_eq, NULL);
+		break;
 	}
 }
 
@@ -564,7 +572,8 @@ static lv_obj_t *page_create(void *arg)
 	if (!strcmp(p->id, "battery") || !strcmp(p->id, "system"))
 		p->timer = lv_timer_create(timer_cb, 3000, p);
 	refresh(p);
-	app_listen(p->scr, EV_SETTINGS | EV_SYS | (!strcmp(p->id, "library") ? EV_UPDATE | EV_DB : 0), on_event, p);
+	app_listen(p->scr, EV_SETTINGS | EV_SYS | (!strcmp(p->id, "library") ? EV_UPDATE | EV_DB : 0) | (!strcmp(p->id, "audio") ? EV_EQ : 0),
+		   on_event, p);
 	lv_obj_add_event_cb(p->scr, on_delete, LV_EVENT_DELETE, p);
 	return p->scr;
 }

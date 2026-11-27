@@ -76,6 +76,11 @@ const struct set_def set_defs[] = {
 	B("audio.pause_jack_out", "1", "audio", "Pause when headphones unplugged"),
 	I("audio.dac_idle_off", "0", 0, 600, 10, "audio", "DAC power-down when idle (experimental)", "s"),
 
+	S("eq.dac", "", "", "Equalizer: headphones"),
+	S("eq.spdif", "", "", "Equalizer: S/PDIF"),
+	S("eq.bt", "", "", "Equalizer: Bluetooth"),
+	B("eq.bt_per_device", "1", "", "Equalizer per Bluetooth device"),
+
 	E("lib.scan", "card", "manual=Manual|card=When the card changes|mount=On every mount", "library", "Scan library"),
 	B("lib.scan_after_usb", "1", "library", "Scan after USB storage"),
 	E("lib.artist_tag", "albumartist", "artist=Artist|albumartist=Album artist", "library", "Artist list by"),

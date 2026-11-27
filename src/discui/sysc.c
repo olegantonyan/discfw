@@ -37,6 +37,17 @@ void sysc_send(const char *fmt, ...)
 	update_events();
 }
 
+void sysc_send_line(const char *line)
+{
+	if (conn.fd < 0) {
+		ui_toast("System service not running");
+		return;
+	}
+	lc_puts(&conn, line);
+	lc_puts(&conn, "\n");
+	update_events();
+}
+
 void sysc_set(const char *key, const char *val)
 {
 	if (conn.fd < 0) {
@@ -164,6 +175,8 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		if (!strcmp(key, "ui.font") || !strcmp(key, "ui.accent"))
 			ui_restart();
 		app_notify(EV_SETTINGS);
+	} else if (!strcmp(tag, "!eq")) {
+		app_notify(EV_EQ);
 	} else if (!strcmp(tag, "!mount")) {
 		fsdir_invalidate();
 		app_notify(EV_MOUNT);

@@ -9,7 +9,7 @@ SRCS := $(wildcard *.c)
 all: discsys discfw
 
 discsys: $(SRCS) discsys.h
-	$(CC) $(CFLAGS) $(shell $(PKG_CONFIG) --cflags $(PKGS)) -o $@ $(SRCS) $(LDFLAGS) $(shell $(PKG_CONFIG) --libs $(PKGS)) -ldisc
+	$(CC) $(CFLAGS) $(shell $(PKG_CONFIG) --cflags $(PKGS)) -o $@ $(SRCS) $(LDFLAGS) $(shell $(PKG_CONFIG) --libs $(PKGS)) -ldisc -lm
 
 discfw: cli/discfw.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -ldisc

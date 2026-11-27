@@ -117,6 +117,17 @@ ALSA test: `aplay -D disc FILE.wav`, `speaker-test -D disc -c 2 -r 44100 -F S32_
 
 **S/PDIF:** `audio.spdif` sends coaxial S/PDIF out of the 3.5 mm jack instead of analog audio; connect it to an external DAC with a 3.5 mm to RCA coax cable. The internal DAC is powered down meanwhile, so the 4.4 mm jack is silent too. Unplug headphones first. Output is 24-bit, 44.1–192 kHz (MPD resamples higher rates), at a fixed level: volume does not change it. Changing the setting restarts MPD.
 
+## Equalizer
+
+Settings → Audio → Equalizer.
+
+- **Per output:** Headphones, S/PDIF and Bluetooth each get a preset or Off. With "Remember per headset" (`eq.bt_per_device`, on by default) the connected headset gets its own row; its choice is stored by the headset's name and used whenever it connects. "Bluetooth default" covers headsets without their own choice. USB DAC mode uses the Headphones or S/PDIF preset; set it to Off for bit-perfect output.
+- **AutoEQ presets:** download the "Parametric EQ" file for your headphones from [autoeq.app](https://autoeq.app/) (or the AutoEq repository) and copy it to the `EQ` folder on the card, directly or one folder deep (the layout of AutoEQ downloads). Any EqualizerAPO-style `ParametricEQ.txt` works: `Preamp:` plus `Filter N: ON PK|LSC|HSC|LPQ|HPQ Fc … Hz Gain … dB Q …`. `GraphicEQ.txt` files are skipped. The `EQ` folder is hidden in Folders.
+- **My presets:** "Customize…" on an AutoEQ preset makes an editable copy; "New preset" starts flat. A preset is the parametric filters (up to 20) plus a 10-band graphic EQ on top (31.5 Hz–16 kHz, ±12 dB; shelves at both ends). So you can keep the AutoEQ correction and still add your own bass or treble. Hold a preset to rename, duplicate or delete it.
+- **Editing:** the graphic editor scrolls sideways; tap + or −, hold to repeat (it speeds up). "Parametric" lists the filters: tap one to edit type, frequency, gain, Q, on/off (tap the type or On to switch them); hold it to switch it off, duplicate or delete it. The curve shows the total response (the dim line is the parametric part alone). Changes are heard at once while playing.
+- **Preamp:** Auto (default) lowers the level by the curve's highest boost, so the EQ never clips. + or − switches to a manual preamp (samples that would clip are limited); tap its value to go back to Auto.
+- Presets are stored in `/usr/data/discfw/eq/NAME.txt` in the same EqualizerAPO format, so they also load in mpz or EqualizerAPO. The EQ runs inside ALSA (`disc_eq` plugin, double-precision biquads), for every player: MPD, the USB DAC bridge, `aplay`.
+
 ## Other commands on the player
 
 ```

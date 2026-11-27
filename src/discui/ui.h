@@ -38,6 +38,10 @@ void ui_choice(const char *text, const char *a, const char *b, ui_pick_cb cb, vo
 void ui_text_input(const char *title, const char *initial, bool secret, void (*cb)(const char *text, void *ctx), void *ctx);
 void ui_number_input(const char *title, int val, int min, int max, int step, const char *unit, void (*cb)(int v, void *ctx), void *ctx);
 void ui_info(const char *title, const char *text);
+
+typedef void (*ui_spin_cb)(lv_obj_t *spin, int steps, void *ctx);
+lv_obj_t *ui_spin(lv_obj_t *parent, int width, bool tappable, ui_spin_cb cb, void *ctx);
+void ui_spin_set(lv_obj_t *spin, const char *value, const char *caption);
 bool ui_modal_active(void);
 bool ui_modal_close(void);
 void ui_modal_close_all(void);
@@ -92,7 +96,15 @@ const lv_image_dsc_t *vinyl_disc(void);
 const lv_image_dsc_t *vinyl_label(void);
 
 extern const struct screen_ops scr_home, scr_folders, scr_np, scr_queue, scr_playlists, scr_playlist, scr_library,
-	scr_settings, scr_settings_page, scr_wifi, scr_bt, scr_mode;
+	scr_settings, scr_settings_page, scr_wifi, scr_bt, scr_mode, scr_eq, scr_eq_presets, scr_eq_edit, scr_eq_param,
+	scr_eq_filter;
+
+struct eq_preset;
+void eq_open_editor(const char *id);
+void eq_open_view(const char *id);
+void eq_open_new(const char *id, const struct eq_preset *p);
+void eq_unique_name(const char *base, char *out, size_t len);
+const char *eq_active_summary(char *buf, size_t len);
 
 void folders_open_at(const char *path, const char *select_name);
 void settings_open_page(const char *page);

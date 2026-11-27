@@ -33,6 +33,7 @@ void cfg_flush(void)
 		save_now(NULL);
 	}
 	state_flush();
+	eq_flush();
 }
 
 static gboolean discd_reload(gpointer data)
@@ -121,6 +122,8 @@ static void apply(const char *key)
 		screen_reschedule();
 	else if (!strcmp(key, "time.zone"))
 		tz_apply();
+	else if (prefix(key, "eq."))
+		eq_apply();
 	else if (!strcmp(key, "wifi.enabled") || !strcmp(key, "bt.enabled") || prefix(key, "net.") || !strcmp(key, "bt.battery"))
 		spawn_apply(key);
 	else if (!strcmp(key, "audio.spdif")) {
@@ -236,7 +239,7 @@ void state_flush(void)
 
 void state_init(void)
 {
-	char line[256];
+	char line[1024];
 	FILE *f = fopen(disc_data_path("state"), "r");
 
 	state = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -259,6 +262,12 @@ int state_get_int(const char *key, int def)
 	return v ? atoi(v) : def;
 }
 
+static void state_dirty(void)
+{
+	if (!state_src)
+		state_src = g_timeout_add_seconds(10, state_save, NULL);
+}
+
 void state_set_int(const char *key, int val)
 {
 	char num[16];
@@ -267,6 +276,44 @@ void state_set_int(const char *key, int val)
 		return;
 	snprintf(num, sizeof(num), "%d", val);
 	g_hash_table_replace(state, g_strdup(key), g_strdup(num));
-	if (!state_src)
-		state_src = g_timeout_add_seconds(10, state_save, NULL);
+	state_dirty();
+}
+
+const char *state_get_str(const char *key)
+{
+	return g_hash_table_lookup(state, key);
+}
+
+void state_set_str(const char *key, const char *val)
+{
+	const char *old = state_get_str(key);
+
+	if (old && !strcmp(old, val))
+		return;
+	g_hash_table_replace(state, g_strdup(key), g_strdup(val));
+	state_dirty();
+}
+
+void state_del(const char *key)
+{
+	if (g_hash_table_remove(state, key))
+		state_dirty();
+}
+
+void state_rewrite(const char *prefix, const char *old, const char *val)
+{
+	GPtrArray *keys = g_ptr_array_new_with_free_func(g_free);
+	GHashTableIter it;
+	gpointer k, v;
+
+	g_hash_table_iter_init(&it, state);
+	while (g_hash_table_iter_next(&it, &k, &v))
+		if (!strncmp(k, prefix, strlen(prefix)) && !strcmp(v, old))
+			g_ptr_array_add(keys, g_strdup(k));
+	for (guint i = 0; i < keys->len; i++)
+		if (val)
+			state_set_str(keys->pdata[i], val);
+		else
+			state_del(keys->pdata[i]);
+	g_ptr_array_free(keys, TRUE);
 }

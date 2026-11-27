@@ -24,6 +24,7 @@ enum app_ev {
 	EV_MOUNT = 1 << 11,
 	EV_VOLUME = 1 << 12,
 	EV_COVER = 1 << 13,
+	EV_EQ = 1 << 14,
 };
 
 struct song {
@@ -111,6 +112,7 @@ void sysc_init(void);
 void sysc_send(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void sysc_set(const char *key, const char *val);
 void sysc_set_int(const char *key, int val);
+void sysc_send_line(const char *line);
 
 void dbg_init(void);
 
