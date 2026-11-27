@@ -1,8 +1,34 @@
 #!/bin/sh
+# Flash over USB (mask-ROM mode) with diskOS's writer: DISKOS_DIR, or a pinned diskOS fetched into dl/
+# with its pinned Python dependencies in a venv and its USB uploader built from source.
 set -eu
 HERE=$(CDPATH= cd "$(dirname "$0")" && pwd)
-DISKOS_DIR=${DISKOS_DIR:-$HOME/projects/github/diskOS}
+TOP=$(dirname "$HERE")
+DL=$TOP/dl
+REV=30d36f99d70480d5211bda49fab3c497d93fc21e
+TAR_SHA256=60f338ba7199610b22db69ccbd1215d5e630c34bcf994e8b9181c336a1fb03a3
+if [ -z "${DISKOS_DIR:-}" ]; then
+	DISKOS_DIR=$DL/diskOS-$REV
+	if [ ! -d "$DISKOS_DIR" ]; then
+		echo "disc-flash: fetching diskOS $REV"
+		mkdir -p "$DL"
+		curl -fsSL -o "$DL/diskOS-$REV.tar.gz" "https://github.com/b0hemia/diskOS/archive/$REV.tar.gz"
+		[ "$(gzip -dc "$DL/diskOS-$REV.tar.gz" | sha256sum | cut -d' ' -f1)" = "$TAR_SHA256" ] || { echo "disc-flash: diskOS archive does not match" >&2; exit 1; }
+		tar -xzf "$DL/diskOS-$REV.tar.gz" -C "$DL"
+	fi
+	if [ ! -f "$DISKOS_DIR/.venv/.discfw-ok" ]; then
+		echo "disc-flash: setting up diskOS's Python dependencies"
+		python3 -m venv --clear "$DISKOS_DIR/.venv"
+		"$DISKOS_DIR/.venv/bin/python" -m pip install -q --disable-pip-version-check -r "$DISKOS_DIR/requirements.txt"
+		touch "$DISKOS_DIR/.venv/.discfw-ok"
+	fi
+	if [ ! -x "$DISKOS_DIR/vendor/linux-x86_64/usbboot" ]; then
+		echo "disc-flash: building usbboot"
+		bash "$DISKOS_DIR/build/build-usbboot-static.sh" > /dev/null
+	fi
+fi
 export DISKOS_DIR
+export PATH="$TOP/output/host/bin:$PATH"
 PY=python3
 [ -x "$DISKOS_DIR/.venv/bin/python" ] && PY="$DISKOS_DIR/.venv/bin/python"
 exec "$PY" "$HERE/disc_flash.py" "$@"

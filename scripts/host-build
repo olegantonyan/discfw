@@ -16,6 +16,7 @@ lvgl() {
 	[ "$O/lvgl/.conf" -nt "$TOP/package/lvgl/lv_conf.h" ] && [ -f "$O/lvgl/lib/liblvgl.a" ] && return
 	rm -rf "$O/lvgl-src" "$O/lvgl-build" "$O/lvgl"
 	mkdir -p "$O/lvgl-src"
+	[ -f "$TOP/dl/lvgl/lvgl-$LV_VER.tar.gz" ] || make -C "$TOP" br-lvgl-source
 	tar -xzf "$TOP/dl/lvgl/lvgl-$LV_VER.tar.gz" -C "$O/lvgl-src" --strip-components=1
 	cmake -S "$O/lvgl-src" -B "$O/lvgl-build" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="$O/lvgl" -DCMAKE_INSTALL_LIBDIR=lib \
 		-DLV_BUILD_CONF_PATH="$TOP/package/lvgl/lv_conf.h" -DLV_BUILD_INSTALL=ON -DLV_FETCH_DEPENDENCIES=OFF \

@@ -7,7 +7,7 @@
 DISCUI_VERSION = 0.1
 DISCUI_SITE = $(BR2_EXTERNAL_DISC_PATH)/src/discui
 DISCUI_SITE_METHOD = local
-DISCUI_LICENSE = GPL-2.0+
+DISCUI_LICENSE = GPL-3.0+
 DISCUI_DEPENDENCIES = host-pkgconf lvgl libmpdclient libdisc jpeg libpng zlib
 
 define DISCUI_BUILD_CMDS

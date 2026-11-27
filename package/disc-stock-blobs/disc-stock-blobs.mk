@@ -5,10 +5,8 @@
 ################################################################################
 
 DISC_STOCK_BLOBS_VERSION = v257
-DISC_STOCK_BLOBS_OTA = $(call qstrip,$(BR2_PACKAGE_DISC_STOCK_BLOBS_OTA))
-DISC_STOCK_BLOBS_SITE = $(patsubst %/,%,$(dir $(DISC_STOCK_BLOBS_OTA)))
-DISC_STOCK_BLOBS_SOURCE = $(notdir $(DISC_STOCK_BLOBS_OTA))
-DISC_STOCK_BLOBS_SITE_METHOD = file
+DISC_STOCK_BLOBS_SITE = https://fiio-firmware.fiio.net/DISC
+DISC_STOCK_BLOBS_SOURCE = SNOWSKY_DISC_update_20260909_$(DISC_STOCK_BLOBS_VERSION).zip
 DISC_STOCK_BLOBS_LICENSE = GPL-2.0 (kernel, modules), proprietary (radio firmware)
 DISC_STOCK_BLOBS_REDISTRIBUTE = NO
 DISC_STOCK_BLOBS_DEPENDENCIES = host-libopenssl host-squashfs
@@ -42,6 +40,8 @@ endef
 
 define DISC_STOCK_BLOBS_INSTALL_IMAGES_CMDS
 	$(INSTALL) -D -m 0644 $(@D)/xImage $(BINARIES_DIR)/xImage-stock-v257
+	$(INSTALL) -D -m 0644 $(@D)/rootfs.squashfs $(BINARIES_DIR)/stock-rootfs-v257-96M.bin
+	truncate -s 100663296 $(BINARIES_DIR)/stock-rootfs-v257-96M.bin
 endef
 
 $(eval $(generic-package))

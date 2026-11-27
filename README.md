@@ -1,225 +1,195 @@
-# discfw — Snowsky Disc firmware (Buildroot external tree)
+# discfw: open firmware for the FiiO Snowsky Disc
 
-Open userland for the FiiO Snowsky Disc, built from source with mainline Buildroot **2026.02.3 LTS** plus small
-patches (`patches/`). It boots on the **stock kernel** (mtd1 untouched), replaces only the rootfs (mtd2)
-and runs a full player: MPD to the dual CS43131 DAC (or Bluetooth), an LVGL UI with folders, playlists, library,
-now playing, lock screen and on-screen settings, and a system daemon for keys, screen, power and policy.
+> [!WARNING]
+> **Experimental.** discfw is a hobby project in early development. It can have bugs that stop playback, drain the battery or need a reflash. You can always go back to FiiO's stock firmware over USB (see [Back to stock](#back-to-stock)). Use it at your own risk. This project is not made, supported or endorsed by FiiO.
+
+discfw replaces the software of the [FiiO Snowsky Disc](https://www.fiio.com/) music player with an open system built from source with [Buildroot](https://buildroot.org/). It changes only one part of the player's flash memory: the root file system (`mtd2`). FiiO's boot loader, FiiO's Linux 4.4 kernel and the recovery system stay as they are.
+
+What you get today:
+
+- Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
+- A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
+- Bluetooth headphones (A2DP: SBC, aptX, aptX HD).
+- Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
+- Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
+
+## Goals
+
+1. **Speed.** Short delay before a track starts and on skip. The stock player has a retry loop with 1-second sleeps on track changes and powers the DAC down on pause. discfw keeps the DAC ready: a skip takes about 30–50 ms at the same sample rate and about 300 ms when the rate changes (measured 2026-11-25).
+2. **Functionality.** Everything the player needs every day, without the stock software. Because the whole user space is open, the player can do much more than the stock software allows: for example streaming audio over the network (RTP), more Bluetooth codecs (such as AAC or LDAC), other MPD plugins, or your own scripts and services.
+3. **UX.** A UI made for the round screen, fast lists, clear settings.
+4. **Easy to tinker with.** All source is here. Root shell over USB, SSH, plain shell scripts, a host build with fake hardware, test scripts that run on the player.
+5. **Later: the newest mainline Linux kernel.** A port to Linux 7.4 works but is parked: [docs/MAINLINE.md](docs/MAINLINE.md).
+
+## Status
+
+Works: everything in the list above. See [docs/USAGE.md](docs/USAGE.md) for details.
+
+Not yet: USB mass storage, USB DAC mode, headphone buttons (AVRCP), equalizer, IPv6. The music card is read-only on the player, so copy music with a card reader. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
+
+## Hardware
+
+| Part | What |
+|---|---|
+| SoC | Ingenic X2000 (XBurst II, MIPS32), 2 CPU threads at 1.2 GHz, FPU |
+| RAM | 128 MiB LPDDR3 (117.5 MiB usable) |
+| Flash | 256 MiB SPI NAND |
+| Screen | 360×360 round, ST77916 over MIPI DSI; CST816T touch |
+| Audio | 2× Cirrus CS43131 DAC (one per channel), 3.5 mm and 4.4 mm balanced outputs |
+| Radio | AP6212 (Broadcom BCM43438): Wi-Fi 2.4 GHz, Bluetooth |
+| Power | SGM41513 charger, CW2217 fuel gauge, AW35615 USB-C controller |
+| Other | microSD slot, USB-C, 4 buttons (power, volume up, volume down, play) |
+
+Details, pins and the flash layout: [docs/HARDWARE.md](docs/HARDWARE.md).
+
+## How it works
+
+Boot: the SoC's mask ROM starts FiiO's boot loader (`mtd0`). It loads FiiO's kernel (`mtd1`), which mounts the discfw root file system (`mtd2`, read-only squashfs) and runs `/linuxrc`, then BusyBox init. Settings and other state live in `/usr/data/discfw` on the stock data partition (`mtd7`). Music lives on the microSD card.
+
+```
+ buttons ──► discsys ◄────────────── discui ◄── touch
+             keys, screen, power,    LVGL UI on /dev/fb0
+             settings, Wi-Fi, BT         │
+                 │ volume                │ MPD protocol
+                 ▼                       ▼
+              discd ◄── libdisc_hook ◄── MPD ◄── music on microSD
+              DAC, charger               │
+                 │ ioctl, I2C            │ PCM over I2S
+                 ▼                       ▼
+              stock kernel drivers ──► 2× CS43131 DAC ──► headphones
+```
+
+- **MPD** plays the music. Its ALSA output goes through `libdisc_hook`, which tells `discd` the sample rate and when to unmute and mute.
+- **discd** drives the DAC through the stock kernel's driver and controls charging.
+- **discsys** is the system policy: buttons, screen timeouts, power profiles, settings, Wi-Fi, Bluetooth, volume.
+- **discui** is the UI. It talks to MPD and discsys. If it crashes, it restarts alone, and buttons keep working.
+- The stock kernel stays, so discfw uses 8 kernel modules and radio firmware from FiiO's official update file. The build downloads that file itself (see [Blobs and stock firmware](#blobs-and-stock-firmware)).
+
+More: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (design and dev tools), [docs/STOCK_KERNEL.md](docs/STOCK_KERNEL.md) (the kernel interfaces discfw uses and their quirks).
+
+## Before you start
+
+- **The player must run stock firmware V2.57.** The flasher checks this on the device and writes nothing on any other version. If your player runs an older version, update it first with FiiO's normal update.
+- A Linux PC, x86_64, with about 11 GB of free disk space.
+- A USB-C data cable.
+- These packages: the [Buildroot host tools](https://buildroot.org/downloads/manual/manual.html#requirement-mandatory), host gcc 10 or newer, `curl`, Python 3.9 or newer with `venv`, `libusb-1.0`, and the static C library (needed to build the USB flasher tool). On Debian or Ubuntu:
+
+```
+sudo apt install build-essential bc bzip2 cpio curl file git libusb-1.0-0 patch perl python3 python3-venv rsync unzip wget xz-utils
+```
+
+On Fedora add `glibc-static`, on openSUSE add `glibc-devel-static`.
 
 ## Build
 
 ```
-make            # fetches + verifies Buildroot, applies patches/buildroot, configures disc_defconfig, builds
-make menuconfig / make savedefconfig / make br-<target>   # e.g. make br-discui-rebuild
+git clone https://github.com/olegantonyan/discfw.git
+cd discfw
+make
 ```
 
-Output `output/images/`:
+The first build takes about an hour on a fast PC. `make` downloads everything it needs:
 
-- `disc-rootfs-96M.bin` — squashfs (LZO, 128 KiB blocks) padded to the writer's fixed 96 MiB; this is what gets flashed
-- `rootfs.squashfs`, `xImage-stock-v257` (stock kernel, for future RAM-boot work), `sha256sums.txt`
+| Input | From |
+|---|---|
+| Buildroot 2026.02.3 | buildroot.org |
+| Source of all packages (MPD, BlueZ, LVGL, …) | their upstream sites, through Buildroot |
+| FiiO V2.57 update file (105 MB) | `fiio-firmware.fiio.net`, decrypted during the build |
 
-Package patches (`patches/packages/`): MPD (period before buffer; reopen PCM after stop), linux-headers (host gcc
-C23), libglib2 (link-test `statx`, which uClibc-ng declares but lacks on 4.4 headers). Radio userland is built in
-(`iw`, `wpa_supplicant`, `brcm_patchram_plus`, BlueZ incl. `hciconfig`/`hcitool`) but not started at boot yet.
+The results are in `output/images/`:
 
-Inputs: FiiO's official OTA `research/firmware/SNOWSKY_DISC_update_20260909_v257.zip` (sha256-pinned; Kconfig
-`BR2_PACKAGE_DISC_STOCK_BLOBS_OTA`) supplies the 8 GPL stock kernel modules and radio firmware. Everything else is
-source. `board/disc/check-abi.sh` fails the build if any target ELF is not NaN2008 + FP64.
+- `disc-rootfs-96M.bin`: the discfw image to flash.
+- `stock-rootfs-v257-96M.bin`: FiiO's stock root file system, for the way back.
+- `rootfs.squashfs`, `xImage-stock-v257` (FiiO's kernel, not flashed), `sha256sums.txt`.
 
-## Flash and roll back
+Other targets: `make menuconfig`, `make savedefconfig`, `make br-<target>` (for example `make br-discui-rebuild`).
 
-Needs the diskOS checkout (`~/projects/github/diskOS`, or `DISKOS_DIR`) with its udev rule, and a verified diskOS
-stock backup (`~/.local/share/diskos-installer/stock/`). `disc-flash` refuses to run without the backup.
+## Flash
+
+Flashing uses the mask-ROM USB mode of the SoC and the flasher of the [diskOS](https://github.com/b0hemia/diskOS) project. `scripts/disc-flash` downloads a fixed diskOS version into `dl/`, sets up its Python packages in a venv and builds its `usbboot` tool. You do not need to install diskOS.
+
+1. Check everything without the player:
 
 ```
-scripts/disc-flash check     # image sanity + rollback readiness, no USB
-scripts/disc-flash rootfs    # write disc-rootfs-96M.bin to mtd2 (~18 min)
-scripts/disc-flash stock     # restore stock V2.57 rootfs (diskos-installer restore-stock, ~20 min)
+scripts/disc-flash check
 ```
 
-Mask-ROM mode: power the Disc off, hold **Volume-Down**, plug USB (screen stays black). The writer is diskOS's
-(`diskos_installer.flasher.flash`): it writes only mtd2 and first proves on the device that kernel, recovery kernel
-and recovery rootfs are FiiO V2.57, so the same path always restores stock. U-Boot, kernel, recovery, `mac` and
-`/usr/data` are never written by the writer; discfw keeps its state in `/usr/data/discfw/` and leaves stock's files
-alone, so stock comes back with its data. Mask-ROM ignores Power while USB is connected; to leave it, unplug USB and
-hold Power ~6 s (the RTC's long-press reset).
+2. The first time, it asks you to install a udev rule, so that your user can access the player in mask-ROM mode:
 
-**If a build does not boot:** the stock kernel reboots 10 s after a panic. Hold Volume-Down and plug USB while it
-reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unknown, wait 25 minutes before retrying.
+```
+sudo install -m 0644 dl/diskOS-*/udev/70-diskos-maskrom.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger
+```
 
-## On the device
+3. Start the flash:
 
-- USB serial root shell: `/dev/serial/by-id/usb-discfw_discfw_Serial_discfw-if00` (also UART3 `ttyS3` 115200).
-  `scripts/disc-sh 'cmd' ...`, `scripts/disc-sh --push local /tmp/file` (raw bytes, ~16 MB/s, sha256-checked).
-- Boot a build once without flashing: `make && scripts/disc-tryboot` (stores `rootfs.squashfs` in
-  `/usr/data/discfw/boot`, arms a one-shot flag, reboots; `/linuxrc` loop-mounts it, the next boot uses NAND again).
-- Swap a build into the running system: `make && scripts/disc-tryimage` (pushes `rootfs.squashfs` to RAM, loop-mounts it, binds
-  its `/bin /sbin /lib /usr /etc /var` over the running ones, restarts services; gone on reboot).
-- Single files without flashing: `make br-<pkg>-rebuild` then `scripts/disc-hotpatch usr/bin/mpd usr/sbin/discd ...`
-  (pushes each file from `output/target` and bind-mounts it over the squashfs copy; RAM only, gone on reboot).
-  Restart the daemon afterwards (`killall mpd discd discui`; init respawns them).
-- SD card: `/media/sd`, mounted **read-only** (exFAT/vfat via the stock kernel).
-- Persistent state: `/usr/data/discfw/` on the stock `userdata` UBIFS (mtd7, mounted `sync`; stock files untouched; never
-  formatted — if it will not mount, a tmpfs stands in). Holds `wifi/`, `bluetooth/` (BlueZ pairings via
-  `/var/lib/bluetooth`), `ssh/` (host keys, `root/authorized_keys`), `mpd/` (state, playlists), `hostname`, `clock`,
-  `charge_limit`.
-- Wi-Fi: on the player, Settings → Wi-Fi → Networks (or hold the Wi-Fi toggle in the shade): scan, connect (keyboard
-  for the password; discsys derives the WPA key, the passphrase is never stored), change password, forget, hidden
-  networks, status details. discsys talks to `wpa_supplicant`'s control socket; `discfw wifi status | scan | list |
-  connect ssid=S [pass=P] [hidden=1] | forget ssid=S`. From the host: `scripts/disc-wifi add "SSID"`,
-  `remove SSID | list | status | on | off`. Toggling Wi-Fi restarts only Wi-Fi (`S35radio wifi on|off`). Hostname `snowsky-disk-XXXX` (last 4 hex of the Wi-Fi MAC), announced by
-  `mdnsd` as `snowsky-disk-XXXX.local` with `_ssh`, `_sftp-ssh`, `_mpd` services; NTP after each DHCP lease.
-- SSH/SFTP (dropbear + gesftpserver), keys only: `scripts/disc-ssh-key [PUBKEY]`.
-- MPD on TCP 6600 (setting `net.mpd`, optional password `net.mpd_password`) as well as `/run/mpd.sock`;
-  `mpd-run` writes `/run/mpd.conf` from settings at every start. Library: `music_directory /media/sd`, database
-  `mpd/database` on the data partition; scans run at MPD's idle priority, by policy `lib.scan` (when the card's
-  CID changes, every mount, or manual) and never while the card is unmounted. `library reset` drops the database.
-- Settings: `/usr/data/discfw/settings` (`key=value`, only non-defaults). Schema with ranges and choices:
-  `src/common/settings_schema.c`. `discfw list [prefix]`, `discfw get|set|reset KEY`, `discfw cfg KEY` (reads the
-  file without the daemon). Changes apply at once (discd reloads, MPD restarts for network keys, radios restart).
-- Bluetooth headphones: on the player, Settings → Bluetooth → Devices (or hold the Bluetooth toggle in the shade):
-  search, pair (then trust and connect), connect, disconnect, forget, battery when the headset reports it. discsys
-  uses BlueZ over D-Bus with its own agent, which accepts pairing only within 35 s of a pair started on the player.
-  `discfw bt list | scan [SECS] | pair|connect|disconnect|forget MAC`. From the host: `scripts/disc-bt on | scan |
-  pair MAC | connect MAC | forget MAC | list | status | off`. Toggling Bluetooth restarts only Bluetooth.
-  bluez-alsa A2DP source (SBC, aptX, aptX HD); `discbt` moves MPD to the `BT` output while a sink is connected and
-  pauses when it disconnects (nothing leaks out of the jack); bonded headphones reconnect by themselves. Verified
-  2026-11-25 with UGREEN Studio Pro (SBC). Headphone buttons (AVRCP) do not control playback yet: no `uinput`.
-- DAC: `discctl status | rate <hz> | mute | unmute | release | vol <0..255>|+|- | volpct <0..100> | off | reload |
-  watch` (attenuation in 0.5 dB). Volume is MPD's (null mixer, so any MPD client controls it); discsys maps it to
-  `volpct` with `audio.dac_range` dB of range and `audio.vol_max`, and remembers it per output and per BT device.
-  `audio.balance`, `audio.filter` and `audio.dre` use the stock driver's ioctls (applied only once changed from
-  default). `release` = mute in 500 ms unless a new stream unmutes first.
-- Battery: `discctl battery` (`cap mv ma temp limit state vbus stage cycles health typec ichg`; state
-  `battery | charging | full | held | hot | idle`). Charging is set by `battery.limit` (50–100), `battery.resume_drop`,
-  `battery.current` (1.3 A / 0.6 A) and `battery.temp_max`. Low battery: warning at `power.lowbat_warn`, 30 s
-  countdown then power-off at `power.lowbat_off` % or below `power.lowbat_mv`.
-- MPD: `mpc -h /run/mpd.sock status`. ALSA: `aplay -D disc`, `speaker-test -D disc -c 2 -r 44100 -F S32_LE`.
-- Logs: `logread` (syslogd 256 KB RAM ring).
-- Tests (`/usr/libexec/discfw-test/`, sources `scripts/device/`): `skipstress.sh` (random next/prev bursts, checks
-  DMA pace, MPD time, DAC state), `skiplat.sh` (skip latency), `ratetest.sh DIR` (every file: PCM rate, DMA pace,
-  `SP_SRATE` on both chips), `transport.sh DIR` (gapless, seek, pause, stop), `soak.sh SECONDS`, `hwprobe.sh`,
-  `loadtest.sh FILE` (playback under 2-core CPU + SD + memory load), `radiotest.sh` (Wi-Fi + BT bring-up as stock), `msctest.sh` (run detached: RAM-disk mass storage next to ACM, then
-  reverts). `scripts/device/unsafe/uactest.sh` is not installed: tearing down an ACM+UAC2 composite after streaming
-  took the stock kernel's USB gadget down for good (needs a power cycle).
-- Keys (discsys): every key × press/double/hold × screen on/off is a setting `keys.<key>.<press>.<on|off>`
-  (`discfw list keys.`); timings `keys.double_ms`, `keys.long_ms`, `keys.repeat_ms`. discsys learns at run time
-  whether `x2000_key` delivers real press/release (then it times presses itself) or only its own short/long/double
-  codes (then those are used). Power hold (`keys.power_long_ms`, 1.5–4 s) always powers off, after release.
-  Defaults: play = play/pause, double = next, hold = previous; vol± = volume (hold repeats), double vol+/− =
-  next/previous; power = screen off/on.
-- Screen and power (discsys): dim/off timeouts, idle power-off, animations per power profile
-  (`power.battery` / `power.charger` select saver, balanced, performance or custom; `power.<profile>.*`). Standby is
-  a clean power-off; state (queue, position, folder, screen) comes back on boot. Lock screen on wake (`lock.*`).
-  Sleep timer: `discfw sleep MIN` (pause or power-off, `play.sleep_action`).
-- UI (discui): long names scroll by themselves (`ui.marquee`: all, playing item, off); hold a row and drag sideways
-  to scroll its name by hand, hold without dragging for its menu. Home, Folders (letter strip, remembers each folder's position, hold = play / shuffle / queue /
-  create playlist / add to playlist), Now playing (drag the edge ring, or hold the cover and turn it, to seek: one turn = 1 min; cover
-  none/static/rotating/vinyl; ≡ = menu), Queue, Playlists (MPD stored playlists, mpz naming and order, per-playlist play order), Library
-  (artists/albums/genres), Settings (generated from the schema; battery, power profiles, library, timezone,
-  system). Gestures: swipe right from the left edge = back everywhere except the lock screen, also out of menus and dialogs (bulge shows progress), pull down from the top = shade
-  (player, toggles, volume, brightness, shortcuts), swipe up on the lock screen = unlock. Folders not yet in the
-  library play at once through `/run/sdfile` and get scanned in the background. Debug/automation socket
-  `/run/discui.sock`: `state`, `dump [top]`, `tap X Y`, `hold X Y [MS]`, `swipe X1 Y1 X2 Y2 [MS]`, `back`, `home`,
-  `goto SCREEN`, `folder PATH`, `shot PATH` (PNG, round mask).
-- Timezone: `time.zone` (list from `/usr/share/discfw/zones.tsv`), written as a POSIX TZ string to
-  `/usr/data/discfw/TZ` (`/etc/TZ` links there). The clock shows `?` until NTP has synced this boot
-  (`/run/time.synced`); the RTC does not tick on the stock kernel.
+```
+scripts/disc-flash rootfs
+```
 
-## Design
+4. Put the player into **mask-ROM mode**: turn it off, hold **Volume Down**, plug in the USB cable, release after 3 seconds. The screen stays black.
+5. Type `flash`. Writing takes about 18 minutes. Do not unplug the cable.
+6. When it says `flashed`, unplug the cable and hold **Power** for about 6 seconds. The player starts discfw.
 
-| Piece | Choice | Why |
+What the flasher does: before it writes, the device checks that the kernel and the recovery system are FiiO V2.57. Then it writes only `mtd2`, skips bad blocks and reads every block back. It never writes the boot loader, the kernel, the recovery system, the `mac` partition or your data partition.
+
+If a flash fails, read the message. If the result is unknown, the player may still be writing: leave it connected for 25 minutes. Every new attempt needs a full power-off and a new start in mask-ROM mode. Mask-ROM mode is in the SoC itself, so it always works, whatever is in the flash.
+
+## Back to stock
+
+```
+scripts/disc-flash stock
+```
+
+Then the same steps 4–6. This writes FiiO's original V2.57 root file system from `output/images/stock-rootfs-v257-96M.bin`. Your stock settings in the data partition stay. discfw's own folder `/usr/data/discfw` stays too; stock ignores it.
+
+## First steps
+
+- **Music:** put music files on a microSD card (exFAT or FAT32) with a card reader. discfw adds a new card to its library by itself; folders play at once, even before the scan ends.
+- **Wi-Fi:** on the player, open Settings → Wi-Fi → Networks, pick your network and type the password. The Wi-Fi status page shows the IP address and the host name (`snowsky-disk-XXXX`).
+- **SSH:** connect the player to the PC with USB and run `scripts/disc-ssh-key` once. It copies your public key over the USB shell. Then use `ssh -4 root@snowsky-disk-XXXX.local`. Password login is off.
+- **MPD apps:** any MPD client can connect to port 6600 of the player.
+- **USB root shell:** `scripts/disc-sh` (your user needs access to serial ports, often the `dialout` or `uucp` group).
+
+All commands, settings and features: [docs/USAGE.md](docs/USAGE.md).
+
+## Blobs and stock firmware
+
+discfw is built from source, except these parts from FiiO:
+
+- **On the player, never written by discfw:** the boot loader (`mtd0`), FiiO's Linux 4.4.94 kernel (`mtd1`), the recovery system (`mtd3`, `mtd4`).
+- **From FiiO's official V2.57 update file, downloaded during the build:** 8 kernel modules for the stock kernel (SD card, Wi-Fi, GPIO, ADC, watchdog and helpers), the Broadcom Wi-Fi firmware and board calibration, and the Bluetooth patch file.
+
+The kernel and the modules are GPL, but FiiO has not published their source [yet](https://www.head-fi.org/threads/echoes-of-time-snowsky-disc-pure-audio-player-is-officially-released.979352/page-22#post-19294162). The radio firmware is proprietary Broadcom code. For these reasons this project does **not** publish built images: build your own.
+
+## diskOS and discfw
+
+[diskOS](https://github.com/b0hemia/diskOS) is another open project for the same player. discfw would not exist without it. Thanks to the diskOS authors for:
+
+- the mask-ROM flash chain: `usbboot`, the GPL SPL that starts the RAM, the NAND writer and the check that the player runs stock V2.57 before anything is written. discfw uses all of it unchanged through `scripts/disc-flash`;
+- the list of official FiiO update files and their hashes, the first notes on the hardware, and the diskOS Dev image, which gave the first root shell on this player for research.
+
+| | diskOS | discfw |
 |---|---|---|
-| CPU flags | `BR2_mips_32r5` + NaN2008 + FP64, `-ffp-contract=off` | XBurst2 FPU is IEEE-2008; stock userland is FP64/NaN2008. Mainline Buildroot has no XBurst2 symbol; fallback if r5 code misbehaves: thingino's one-symbol `BR2_mips_xburst2` patch (`-march=mips32r2`). |
-| libc | uClibc-ng 1.0.57, **32-bit time_t** | Kernel 4.4 lacks the time64 ALSA/input ABI. musl is always time64 on 32-bit (alsa-lib would use 5.6+ ioctls); glibc with NaN2008 needs headers ≥ 4.5. Buildroot disables uClibc time64 with headers < 5.1. |
-| Kernel headers | 4.4.302 | Match the running kernel. `patches/packages/linux-headers` fixes a C23 build break with host gcc ≥ 15. |
-| Init | BusyBox init + mdev; `/linuxrc` → `/sbin/init`, or, when a one-shot trial is armed, loop-mounts `/usr/data/discfw/boot/rootfs.sqfs` and `pivot_root`s into it (data partition moved along) | Stock U-Boot passes `init=/linuxrc root=/dev/mtdblock_bbt_ro2 rootfstype=squashfs`. A RAM copy of the rootfs was tried and dropped: no swap/zram, so its 17 MB (14.5 % of RAM) is pinned, while NAND page-in costs ~6 ms only under memory pressure the copy itself causes. Any trial failure before the pivot boots NAND. Per-process respawn, no kill-all supervisor. |
-| Radios | `S35radio`: `bcmdhd` with stock parameters at every boot; Wi-Fi = wpa_supplicant + udhcpc; BT = `brcm_patchram_plus` on `ttyS0` + bluez-alsa | `bcmdhd` owns the BT power line too, and needs a 1 MB contiguous buffer (fails once memory fragments), so it loads early and stays loaded; the chip stays powered off until used. |
-| Modules | stock `utils soc_utils soc_gpio soc_msc soc_adc` with stock parameters (`/lib/modules/4.4.94/fiio/*.sh`) | SD card + SDIO host, GPIO, ADC. Wi-Fi (`bcmdhd`) not loaded in v0. |
-| Audio | MPD → ALSA `disc` (hooks PCM over `hw:0,3`) → `libdisc_hook.so` → `discd` | Hook sets DAC rate + unmute on `hw_params` (rate read from `/proc/asound/.../hw_params`; the hooks PCM is not set up yet) and sends `release` on `hw_free`/close, so any ALSA client gets correct DAC state and same-rate reopens never touch the DAC. `S95audio` routes DMA3 → I2S3 (`LO3_MUX=LI11`, as stock) and, first thing at shutdown, stops playback and powers the DAC down. MPD: `format "*:32:2"` + DAC rates in `allowed_formats` (unlisted rates resample to 44.1k), `period_time 40000`; two patches for the stock driver (below). |
-| DAC | `discd` holds `/dev/cs43131` + `/dev/cs43131c` (stock driver ioctls), init once | Opening runs the full init; rate change = SRATE A then C (C sleeps 150 ms, powers both). |
-| Charge limit | `discd` every 5 s: gauge sysfs + SGM41513 `REG08` status, toggles only `REG01` CHG_CONFIG over `/dev/i2c-2`; stop at ≥ limit, resume at limit − 5 while plugged | Stock's `0x28`/`0x29` ioctls also force a 2.4 A input limit on any source; one bit leaves the charger's detected limit alone. Unplugged → charging back on, so a dead `discd` never blocks charging. Details: `SYSTEM_CONTROL.md` §4.2. |
-| Supervision | inittab `respawn` for `discd`, `discsys`, `mpd-run`, `discui`; discsys pings the UI every 5 s and kills it after 3 missed answers; two UI crashes in 10 s → safe mode | A crashed daemon restarts alone and rebuilds its state from MPD, discd and sysfs. |
-| System policy | `discsys` (GLib): keys, screen power (backlight + `bl_power`, panel/touch sleep), power profiles, low battery, settings store, volume bridge, library scan policy; line protocol on `/run/discsys.sock`, CLI `discfw` | Keys, volume, power-off and screen timeouts keep working while the UI is dead or restarting. |
-| UI | `discui`, LVGL 9.6 (static), own fbdev flush with 180° rotation, own touch reader + gesture layer, poll()-driven loop that sleeps with the screen off, recycled-row lists, cover art in a worker thread (libjpeg-turbo DCT scaling, libpng) | Panel is mounted upside down; DejaVu Sans via tiny_ttf for accented names. |
-| Formats | MPD: FLAC, MP3 (mpg123), Ogg/Opus, WAV/AIFF (sndfile), plus ffmpeg with only aac/alac/ape/wavpack/wma/tta decoders | Stock parity without a full ffmpeg. |
-| USB | configfs gadget, ACM only | Root shell for development. |
+| Kernel | FiiO stock 4.4 | FiiO stock 4.4 (mainline 7.4 port parked) |
+| Root file system | FiiO stock, plus a small patch | own, built from source with Buildroot |
+| Player engine | FiiO's stock `mq_player` | MPD |
+| UI | new UI (replaces `mq_ui`) | new UI (`discui`) |
+| Writes | only `mtd2`, with the V2.57 check | the same, with the diskOS writer |
+| Notable features | own library database, AirPlay receiver, Cast and AirPlay sending, Last.fm, themes, signed app updates | MPD library, SSH and SFTP, MPD over the network, root shell, charge limit |
+| Installer | GUI and CLI for Linux, macOS, Windows | `make` and scripts, Linux only |
 
-## Development on the host
+Both projects keep FiiO's kernel and touch only `mtd2`, so both can go back to stock the same way. diskOS changes as little of the stock system as possible and keeps FiiO's audio engine. discfw replaces the whole user space, including the audio engine, to get control over latency and behavior, and to add features that the stock software cannot have.
 
-`scripts/host-build [test|discsys|discui|all]` builds into `output/host-discfw` with ASan/UBSan: libdisc unit
-tests, `discsys --fake-hw`, and a headless `discui --host` (in-memory display; drive it through its debug socket,
-screenshots via `shot`). Point them at a host MPD with `DISC_RUN_DIR` (sockets), `DISC_DATA_DIR` (settings and
-state), `DISC_MUSIC_ROOT` and `DISCUI_FONT`. Host LVGL is built from the pinned tarball with the same `lv_conf.h`.
+## Documentation
 
-## Stock kernel quirks (4.4.94) and workarounds
+- [docs/USAGE.md](docs/USAGE.md): on the player: UI, buttons, settings, Wi-Fi, Bluetooth, SSH, MPD, battery, commands.
+- [docs/HARDWARE.md](docs/HARDWARE.md): chips, buses, pins, flash layout, boot chain, mask-ROM mode.
+- [docs/STOCK_KERNEL.md](docs/STOCK_KERNEL.md): how discfw talks to the stock kernel, known kernel bugs and workarounds, the blob list.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): source layout, design, testing without flashing, host build, device tests, roadmap.
+- [docs/MAINLINE.md](docs/MAINLINE.md): the parked Linux 7.4 port on branch `kernel-74`.
 
-- **AS DMA stale pointer** (`sound/soc/ingenic/as-v2/as-dma.c`): `.pointer` returns `prtd->hw_ptr`, updated only in
-  the period IRQ and reset only at `open()` (no `.prepare`; `hw_params` keeps it). After stop → prepare → start on the
-  same open PCM the first pointer read is the old position: if it equals the start threshold the stream xruns 60 µs
-  after every start forever (no sound, MPD time races); otherwise the first ~0.5 s are misplaced. **Rule: never
-  restart a stopped PCM on the same handle; close and reopen** (~1.5 ms). MPD patch
-  `0002-alsa-reopen-instead-of-prepare-after-stop` does this after `snd_pcm_drop()` (skip/seek) and in xrun recovery.
-- **Buffer size step**: the driver accepts only some buffer sizes, so `snd_pcm_hw_params_set_buffer_time_near()` fails
-  at 44.1 kHz when called before the period; MPD patch `0001` sets the period first (as `aplay` does).
-- **Routing**: DMA3 → I2S3 needs `LO3_MUX=LI11` (stock `mq_player` sets it; all `LOn_MUX` are `UNUSED` at boot).
-- **Wi-Fi/BT coexistence** (one radio): with Wi-Fi power save off (stock `PM=0`), A2DP dropped ~1 s every ~4 s.
-  Ours: `config.txt` `PM=2` + `iw dev wlan0 set power_save on` (after link-up and each DHCP lease) — clean.
-- **BlueZ discovery** of dual-mode headsets: the default mixed scan only saw their LE side and paired over LE (no
-  A2DP). `bt pair` scans `bredr` and turns `pairable on` first (else the pairing is not bonded and is lost).
-- **No swap**: no `CONFIG_SWAP`, so no zram/zswap. RAM headroom comes from running lean.
-- **bcmdhd** preallocates a 1 MB physically contiguous buffer at `insmod` (order-9); after hours of uptime that can
-  fail with `-ENOMEM` and a failed load leaks a platform device. Load it at boot; fallback: drop caches + compact.
-- **Rare NAND read glitch**: on the first cold boot after one flash, a read of rootfs block 37 came back with a
-  16-byte burst shifted by one byte. Squashfs has no data checksums, the bad page stayed in the page cache and
-  `mpd` segfaulted on every restart; the flash itself was intact (re-read after `drop_caches` matched). Not
-  reproduced in 1.4 GB of re-reads under Wi-Fi/SD load or 8 reboots. Seen again 2026-11-26 on the first boot after
-  a flash (block 119: first read wrong, the next three right; `discsys` failed to exec with EIO). Defences: `guard`
-  (inittab) drops the page cache at start if any crash or SQUASHFS error was logged, and after ≥ 3 more in 10 s; `scripts/disc-verify` reads mtd2 back and compares every 128 KiB block with the
-  image (`NODROP=1` checks what boot already cached).
-- **Restart halts**: the kernel's restart path (`reboot(2)`) leaves the board dark and hung. `/sbin/reboot` is a
-  wrapper: init runs the normal shutdown, then `/usr/sbin/discreset` issues the stock `soc_watchdog.ko` reset ioctl
-  (`_IO('W', 0x10)`, `/dev/jz_watchdog`); back on USB in ~7 s. Power-off works as is.
-- **No IPv6**: nothing answers AAAA for the player's name. `mdnsd` is patched to answer with an NSEC (RFC 6762 §6.1),
-  which macOS/iOS/Windows honour; Avahi on Linux still waits 5 s for AAAA — use `ssh -4` or `AddressFamily inet`.
-- **ISP DNS** (and many others) never answer PTR queries for private addresses, so dropbear's reverse lookup cost
-  ~45 s per login; built with `BR2_PACKAGE_DROPBEAR_DISABLE_REVERSEDNS`.
-- **DAC ioctls sleep**: mute/unmute ≈ 50 ms, `C_SET_SRATE` ≈ 160 ms (HZ=100). Skip latency to running stream: same
-  rate ≈ 40–50 ms, rate change ≈ 300 ms.
-- **exFAT (FiiO 4.4 driver) `stat` is slow cold**: ≈ 35 ms per entry on a 1 TB card; a 784-entry root took 27 s to
-  `stat` cold vs 4 ms for `readdir` alone (`d_type` is filled). **Rule: list folders by `d_type`, never `stat` per
-  entry.** 84 root entries (`*.BMK`, names cut to 20 chars) come back from `readdir` but fail lookup (`ENOENT`); skip.
-- **SD bus**: 4-bit, 50 MHz high-speed (no UHS) ≈ 20 MB/s, ample for 384k/32-bit PCM (3 MB/s).
+## License
 
-## Roadmap
+discfw's own files are under the GNU General Public License v3.0 or later ([LICENSE](LICENSE)). The patches in `patches/` follow the licenses of the projects they patch. Downloaded parts keep their own licenses; `make br-legal-info` lists them.
 
-1. **Any kernel**: ~~back up mtd0–mtd7 incl. `mac`~~ done 2026-11-25 (`../backup/nand-2026-11-25/`, no OOB);
-   tethered RAM boot (usbboot SPL + jump stub + uImage at 0x80F00000, no NAND writes); a writer for mtd1 with a
-   stock-kernel restore path; kernel from source (4.4.94 SDK mirror, decompiled board DT; later 5.10/6.6/mainline).
-   Mainline Linux 7.4 was ported 2026-11-25/26 and parked (unreliable NAND boots): branch `kernel-74`,
-   `../research/MAINLINE.md` § Status.
-2. **Parity**: USB storage (configfs `mass_storage`, `lun.0/file=/dev/mmcblk0` after unmount), Wi-Fi + Bluetooth
-   services (wpa_supplicant config, bluetoothd, bluez-alsa as a second MPD output), USB DAC mode (configfs `uac2`;
-   FiiO's kernel has the multi-rate `u_audio` backport) + capture→`disc` forwarder, jack status, low-battery
-   power-off, settings storage, DAC low-power when idle, library database, EQ. Battery indicator + charge limit:
-   done 2026-11-26.
-
-   Verified on device 2026-11-25 (`scripts/device/radiotest.sh`, stock procedure): `bcmdhd` + stock fw/nvram →
-   `wlan0` (MAC from chip OTP, country CN by default), `iw` scan OK; `brcm_patchram_plus --enable_hci ... --baudrate
-   3000000 --patchram BCM4343A1_001.002.009.1026.1055.hcd /dev/ttyS0` → `hci0` UP (BCM43438A1, BT 5.2 fw 1026.1055).
-   Kernel has `bluetooth`, `btbcm`, `hci_uart`, `n_hci`, `cfg80211` built in. Audio stayed clean (0 anomalies in a
-   10-min soak) during repeated Wi-Fi scans + BT inquiries. Mass storage: ACM + `mass_storage` composite enumerates
-   on the host (RO LUN) and reverts cleanly. UAC2 gadget: host sees S32_LE stereo, adaptive iso OUT, 32k–384k + a
-   native-DSD altset, and accepted a 96k stream; the ACM function did not enumerate alongside it, and unbinding the
-   composite afterwards left the device off USB (no panic reboot). USB-DAC mode must be its own gadget (as stock's
-   `uac_demo`), switched with care; root-cause the teardown before shipping it. The charger's driver charges on its
-   own; the gauge is `/sys/class/power_supply/cw221X-bat`. RTC does not tick (`rtc32k_init_on=0`), so time needs NTP.
-   Full image re-verified 2026-11-25 from RAM (`disc-tryimage`): rates 32k–384k + soxr resampling, transport 8/8,
-   60/60 skip bursts, skip 29–49 ms same rate / ~300 ms across rates, playback clean under 2-core CPU + SD + 24 MB
-   tmpfs load at 48k and 96k (underruns only when overloaded ×2 with RAM nearly exhausted), dbus + bluetoothd →
-   `bluetoothctl show` powered, Wi-Fi scan 10–11 networks, `S95audio stop` 0.35 s, `poweroff` leaves USB for good.
-   RSS: mpd 12.6 MB, bluetoothd 2.9, discui 2.6, dbus 1.1, discd 0.4. Flashed (image `59e858c1…`) and re-run from a
-   clean boot: rates 20/20 (+2 intended rejects), transport 8/8, skips 60/60, load test clean; services up ≈ 5 s
-   after kernel start. By ear/hand: no pops (start, stop, skip, power-off), keys and touch direction OK, long-press power-off OK,
-   Power wakes the screen after the 60 s timeout.
-
-Background: `../research/FROM_SCRATCH.md`, `../research/re/blobs/BLOBS_ABI.md`, `../research/re/spike1_cs43131/`.
+Bug reports and pull requests are welcome. Please test changes on a real player and say how you tested.
