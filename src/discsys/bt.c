@@ -10,10 +10,12 @@
 #define AGENT_PATH "/org/discfw/agent"
 #define A2DP_SINK "0000110b-0000-1000-8000-00805f9b34fb"
 #define CALL_MS 30000
+#define UPDATE_MS 200
+#define HEADSET_LOW_PCT 20
 
 static GDBusObjectManager *om;
 static GDBusConnection *bus;
-static guint agent_id, scan_src;
+static guint agent_id, scan_src, update_src;
 static gint64 pair_until;
 
 static const char agent_xml[] = "<node><interface name='org.bluez.Agent1'>"
@@ -76,52 +78,6 @@ static void register_agent(void)
 	g_dbus_connection_call(bus, "org.bluez", "/org/bluez", "org.bluez.AgentManager1", "RequestDefaultAgent",
 			       g_variant_new("(o)", AGENT_PATH), NULL, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, call_done,
 			       "RequestDefaultAgent");
-}
-
-static void on_owner(GObject *obj, GParamSpec *spec, gpointer data)
-{
-	gchar *owner = g_dbus_object_manager_client_get_name_owner(G_DBUS_OBJECT_MANAGER_CLIENT(obj));
-
-	(void)spec;
-	(void)data;
-	if (owner) {
-		logmsg(LOG_INFO, "bluetoothd up, registering agent");
-		register_agent();
-	}
-	g_free(owner);
-}
-
-static void om_ready(GObject *src, GAsyncResult *res, gpointer data)
-{
-	GError *e = NULL;
-	GDBusNodeInfo *info;
-
-	(void)src;
-	(void)data;
-	om = g_dbus_object_manager_client_new_for_bus_finish(res, &e);
-	if (!om) {
-		logmsg(LOG_ERR, "bluez object manager: %s", e->message);
-		g_error_free(e);
-		return;
-	}
-	bus = g_dbus_object_manager_client_get_connection(G_DBUS_OBJECT_MANAGER_CLIENT(om));
-	info = g_dbus_node_info_new_for_xml(agent_xml, NULL);
-	agent_id = g_dbus_connection_register_object(bus, AGENT_PATH, info->interfaces[0], &agent_vtable, NULL, NULL, &e);
-	g_dbus_node_info_unref(info);
-	if (!agent_id) {
-		logmsg(LOG_ERR, "agent export: %s", e->message);
-		g_clear_error(&e);
-	}
-	g_signal_connect(om, "notify::name-owner", G_CALLBACK(on_owner), NULL);
-	on_owner(G_OBJECT(om), NULL, NULL);
-}
-
-void bt_init(void)
-{
-	if (sys.fake_hw)
-		return;
-	g_dbus_object_manager_client_new_for_bus(G_BUS_TYPE_SYSTEM, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, "org.bluez", "/",
-						 NULL, NULL, NULL, NULL, om_ready, NULL);
 }
 
 static GDBusProxy *iface_of(GDBusObject *o, const char *name)
@@ -189,6 +145,163 @@ static bool has_a2dp_sink(GDBusProxy *p)
 	return r;
 }
 
+static bool is_audio(GDBusProxy *d)
+{
+	char icon[48];
+
+	prop_str(d, "Icon", icon, sizeof(icon));
+	return !strncmp(icon, "audio", 5) || has_a2dp_sink(d);
+}
+
+static int battery_of(GDBusObject *o)
+{
+	GDBusProxy *b = iface_of(o, "org.bluez.Battery1");
+	int r = b ? prop_int(b, "Percentage", -1) : -1;
+
+	if (b)
+		g_object_unref(b);
+	return r;
+}
+
+static void headset_set(const char *name, int bat)
+{
+	static bool warned;
+	struct kvbuf b;
+	char msg[96];
+
+	if (!strcmp(name, sys.bt_name) && bat == sys.bt_bat)
+		return;
+	snprintf(sys.bt_name, sizeof(sys.bt_name), "%s", name);
+	sys.bt_bat = bat;
+	kv_init(&b);
+	kv_raw(&b, "!bt");
+	kv_str(&b, "name", name);
+	kv_int(&b, "battery", bat);
+	ev_kv(&b);
+	if (bat < 0 || bat > HEADSET_LOW_PCT) {
+		warned = false;
+	} else if (!warned) {
+		warned = true;
+		snprintf(msg, sizeof(msg), "Headphones battery low: %d%%", bat);
+		ev_toast(msg);
+	}
+}
+
+static gboolean headset_update(gpointer data)
+{
+	GList *objs = om ? g_dbus_object_manager_get_objects(om) : NULL;
+	char name[64] = "";
+	int bat = -1;
+	bool found = false;
+
+	(void)data;
+	update_src = 0;
+	for (GList *l = objs; l && !found; l = l->next) {
+		GDBusProxy *d = iface_of(l->data, "org.bluez.Device1");
+		if (!d)
+			continue;
+		if (prop_bool(d, "Connected") && is_audio(d)) {
+			found = true;
+			prop_str(d, "Alias", name, sizeof(name));
+			bat = battery_of(l->data);
+		}
+		g_object_unref(d);
+	}
+	g_list_free_full(objs, g_object_unref);
+	headset_set(name, bat);
+	return G_SOURCE_REMOVE;
+}
+
+static void schedule_update(void)
+{
+	if (!update_src)
+		update_src = g_timeout_add(UPDATE_MS, headset_update, NULL);
+}
+
+static void on_object(GDBusObjectManager *m, GDBusObject *o, gpointer data)
+{
+	(void)m;
+	(void)o;
+	(void)data;
+	schedule_update();
+}
+
+static void on_iface(GDBusObjectManager *m, GDBusObject *o, GDBusInterface *i, gpointer data)
+{
+	(void)i;
+	on_object(m, o, data);
+}
+
+static void on_props(GDBusObjectManagerClient *m, GDBusObjectProxy *o, GDBusProxy *p, GVariant *changed,
+		     const gchar *const *invalidated, gpointer data)
+{
+	const char *name = g_dbus_proxy_get_interface_name(p);
+
+	(void)m;
+	(void)o;
+	(void)changed;
+	(void)invalidated;
+	(void)data;
+	if (!strcmp(name, "org.bluez.Device1") || !strcmp(name, "org.bluez.Battery1"))
+		schedule_update();
+}
+
+static void on_owner(GObject *obj, GParamSpec *spec, gpointer data)
+{
+	gchar *owner = g_dbus_object_manager_client_get_name_owner(G_DBUS_OBJECT_MANAGER_CLIENT(obj));
+
+	(void)spec;
+	(void)data;
+	if (owner) {
+		logmsg(LOG_INFO, "bluetoothd up, registering agent");
+		register_agent();
+	}
+	g_free(owner);
+	schedule_update();
+}
+
+static void om_ready(GObject *src, GAsyncResult *res, gpointer data)
+{
+	GError *e = NULL;
+	GDBusNodeInfo *info;
+
+	(void)src;
+	(void)data;
+	om = g_dbus_object_manager_client_new_for_bus_finish(res, &e);
+	if (!om) {
+		logmsg(LOG_ERR, "bluez object manager: %s", e->message);
+		g_error_free(e);
+		return;
+	}
+	bus = g_dbus_object_manager_client_get_connection(G_DBUS_OBJECT_MANAGER_CLIENT(om));
+	info = g_dbus_node_info_new_for_xml(agent_xml, NULL);
+	agent_id = g_dbus_connection_register_object(bus, AGENT_PATH, info->interfaces[0], &agent_vtable, NULL, NULL, &e);
+	g_dbus_node_info_unref(info);
+	if (!agent_id) {
+		logmsg(LOG_ERR, "agent export: %s", e->message);
+		g_clear_error(&e);
+	}
+	g_signal_connect(om, "notify::name-owner", G_CALLBACK(on_owner), NULL);
+	g_signal_connect(om, "object-added", G_CALLBACK(on_object), NULL);
+	g_signal_connect(om, "object-removed", G_CALLBACK(on_object), NULL);
+	g_signal_connect(om, "interface-added", G_CALLBACK(on_iface), NULL);
+	g_signal_connect(om, "interface-removed", G_CALLBACK(on_iface), NULL);
+	g_signal_connect(om, "interface-proxy-properties-changed", G_CALLBACK(on_props), NULL);
+	on_owner(G_OBJECT(om), NULL, NULL);
+}
+
+void bt_init(void)
+{
+	sys.bt_bat = -1;
+	if (sys.fake_hw) {
+		snprintf(sys.bt_name, sizeof(sys.bt_name), "Fake headset");
+		sys.bt_bat = 60;
+		return;
+	}
+	g_dbus_object_manager_client_new_for_bus(G_BUS_TYPE_SYSTEM, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, "org.bluez", "/",
+						 NULL, NULL, NULL, NULL, om_ready, NULL);
+}
+
 static GDBusProxy *device(const char *mac)
 {
 	GList *objs = om ? g_dbus_object_manager_get_objects(om) : NULL;
@@ -243,7 +356,7 @@ static void list(struct kvbuf *out)
 	kv_append(out, b.s);
 	kv_free(&b);
 	for (GList *l = objs; l; l = l->next) {
-		GDBusProxy *d = iface_of(l->data, "org.bluez.Device1"), *bat;
+		GDBusProxy *d = iface_of(l->data, "org.bluez.Device1");
 		char addr[24], name[128], icon[48];
 		bool paired, audio;
 		if (!d)
@@ -252,7 +365,7 @@ static void list(struct kvbuf *out)
 		prop_str(d, "Alias", name, sizeof(name));
 		prop_str(d, "Icon", icon, sizeof(icon));
 		paired = prop_bool(d, "Paired");
-		audio = !strncmp(icon, "audio", 5) || has_a2dp_sink(d);
+		audio = is_audio(d);
 		if (paired || (audio && !unnamed(name, addr))) {
 			kv_init(&b);
 			kv_raw(&b, "= device");
@@ -264,10 +377,7 @@ static void list(struct kvbuf *out)
 			kv_int(&b, "trusted", prop_bool(d, "Trusted"));
 			kv_int(&b, "audio", audio);
 			kv_int(&b, "rssi", prop_int(d, "RSSI", 0));
-			bat = iface_of(l->data, "org.bluez.Battery1");
-			kv_int(&b, "battery", bat ? prop_int(bat, "Percentage", -1) : -1);
-			if (bat)
-				g_object_unref(bat);
+			kv_int(&b, "battery", battery_of(l->data));
 			kv_end(&b);
 			kv_append(out, b.s);
 			kv_free(&b);

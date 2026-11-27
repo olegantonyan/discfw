@@ -53,6 +53,8 @@ struct sysstate {
 	int volume;
 	bool out_bt;
 	char bt_dev[64];
+	char bt_name[64];
+	int bt_bat;
 	int sleep_left;
 	bool powered;
 	char profile[16];

@@ -35,8 +35,13 @@ static void refresh(void)
 	lv_obj_set_hidden(date_lbl, !valid || !set_get_bool("lock.date"));
 	strftime(buf, sizeof(buf), "%A, %d %B", &tm);
 	lv_label_set_text(date_lbl, buf);
-	lv_obj_set_hidden(bat_lbl, !set_get_bool("lock.battery") || !app.bat.valid);
-	lv_label_set_text_fmt(bat_lbl, "%s%d%%", !strcmp(app.bat.state, "charging") ? LV_SYMBOL_CHARGE " " : "", app.bat.cap);
+	lv_obj_set_hidden(bat_lbl, !set_get_bool("lock.battery") || (!app.bat.valid && app.sys.bt_bat < 0));
+	buf[0] = 0;
+	if (app.bat.valid)
+		snprintf(buf, sizeof(buf), "%s%d%%", !strcmp(app.bat.state, "charging") ? LV_SYMBOL_CHARGE " " : "", app.bat.cap);
+	if (app.sys.bt_bat >= 0)
+		snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%s" LV_SYMBOL_BLUETOOTH " %d%%", buf[0] ? "   " : "", app.sys.bt_bat);
+	lv_label_set_text(bat_lbl, buf);
 	bool song = set_get_bool("lock.song") && app.mpd.cur.uri[0];
 	lv_obj_set_hidden(song_lbl, !song);
 	lv_obj_set_hidden(artist_lbl, !song);
@@ -130,6 +135,6 @@ void lock_init(void)
 	hint = ui_label(lock, &lv_font_montserrat_14, LV_SYMBOL_UP " swipe up");
 	lv_obj_set_style_text_color(hint, lv_color_hex(0x707070), 0);
 	lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -14);
-	app_listen(lock, EV_SECOND | EV_SONG | EV_BAT | EV_COVER | EV_SETTINGS, on_event, NULL);
+	app_listen(lock, EV_SECOND | EV_SONG | EV_BAT | EV_SYS | EV_COVER | EV_SETTINGS, on_event, NULL);
 	lv_obj_set_hidden(lock, true);
 }

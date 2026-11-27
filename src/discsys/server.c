@@ -91,6 +91,8 @@ static void snapshot(struct client *cl, const char *tag)
 	kv_int(&b, "vol", sys.volume);
 	kv_str(&b, "out", sys.output == OUT_BT ? "bt" : "dac");
 	kv_str(&b, "btdev", sys.bt_dev);
+	kv_str(&b, "btname", sys.bt_name);
+	kv_int(&b, "btbat", sys.bt_bat);
 	kv_int(&b, "sleep", sys.sleep_left_s);
 	power_status(&b);
 	reply(cl, &b);

@@ -91,6 +91,7 @@ static void spawn_apply(const char *key)
 
 	if (sys.fake_hw)
 		return;
+	cfg_flush();
 	if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_DEFAULT, NULL, NULL, NULL, &e)) {
 		logmsg(LOG_ERR, "apply %s: %s", key, e->message);
 		g_error_free(e);

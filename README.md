@@ -9,7 +9,7 @@ What you get today:
 
 - Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
 - A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
-- Bluetooth headphones (A2DP: SBC, aptX, aptX HD).
+- Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level.
 - Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
 - Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
 

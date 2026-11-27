@@ -1,7 +1,7 @@
 #!/bin/sh
 # AP6212 (BCM43438): bcmdhd powers both halves (it owns bt_reg_on). It loads at every boot and is never unloaded:
 # it needs a 1 MB contiguous buffer, which fails once memory is fragmented (the chip stays powered off until used).
-# Wi-Fi: wpa_supplicant + udhcpc (hook starts mdnsd/ntpd); power save on, or Wi-Fi starves Bluetooth A2DP (shared radio). Bluetooth: firmware over ttyS0 as stock, then bluealsa.
+# Wi-Fi: wpa_supplicant + udhcpc (hook starts mdnsd/ntpd); power save on, or Wi-Fi starves Bluetooth A2DP (shared radio). Bluetooth: firmware over ttyS0 as stock, then bluealsa (HFP-AG with bt.battery: headsets report their battery only over HFP).
 S=/usr/data/discfw
 WCONF=$S/wifi/wpa_supplicant.conf
 BTFW=/lib/firmware/bt_bcm/BCM4343A1_001.002.009.1026.1055.hcd
@@ -54,7 +54,9 @@ bt_start() {
 		echo $! > /run/patchram.pid
 		wait_for /sys/class/bluetooth/hci0 75 || return 1
 	fi
-	(while on bluetooth; do bluealsa -S -p a2dp-source --a2dp-volume --initial-volume=40 --keep-alive=5 --io-rt-priority=40; sleep 2; done) > /dev/null 2>&1 &
+	hfp=
+	[ "$(discfw cfg bt.battery)" = 1 ] && hfp="-p hfp-ag"
+	(while on bluetooth; do bluealsa -S -p a2dp-source $hfp --a2dp-volume --initial-volume=40 --keep-alive=5 --io-rt-priority=40; sleep 2; done) > /dev/null 2>&1 &
 	echo $! > /run/bluealsa-loop.pid
 	for i in $(seq 1 50); do timeout 2 bluetoothctl show 2>/dev/null | grep -q 'Powered: yes' && break; sleep 0.2; done
 	for m in $(timeout 3 bluetoothctl devices Bonded 2>/dev/null | cut -d' ' -f2); do

@@ -88,6 +88,12 @@ static void parse_bat(const char *line)
 	app_notify(EV_BAT);
 }
 
+static void parse_bt(const char *line, const char *name_key, const char *bat_key)
+{
+	kv_get(line, name_key, app.sys.bt_name, sizeof(app.sys.bt_name));
+	app.sys.bt_bat = kv_get_int(line, bat_key, -1);
+}
+
 static void parse_power(const char *line)
 {
 	app.sys.powered = kv_get_int(line, "powered", 0);
@@ -117,6 +123,7 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		kv_get(line, "out", v, sizeof(v));
 		app.sys.out_bt = !strcmp(v, "bt");
 		kv_get(line, "btdev", app.sys.bt_dev, sizeof(app.sys.bt_dev));
+		parse_bt(line, "btname", "btbat");
 		app.sys.sleep_left = kv_get_int(line, "sleep", 0);
 		parse_power(line);
 	} else if (!strcmp(tag, "!screen")) {
@@ -128,6 +135,9 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		app_notify(EV_VOLUME);
 	} else if (!strcmp(tag, "!bat")) {
 		parse_bat(line);
+	} else if (!strcmp(tag, "!bt")) {
+		parse_bt(line, "name", "battery");
+		app_notify(EV_SYS);
 	} else if (!strcmp(tag, "!power")) {
 		parse_power(line);
 	} else if (!strcmp(tag, "!sleep")) {
@@ -200,6 +210,7 @@ static void disconnect(void)
 	lc_close(&conn);
 	conn.fd = -1;
 	app.sys.connected = false;
+	app.sys.bt_bat = -1;
 	if (!app.sys.screen_on) {
 		app.sys.screen_on = true;
 		disp_set_active(true);
@@ -210,6 +221,7 @@ static void disconnect(void)
 void sysc_init(void)
 {
 	app.sys.screen_on = true;
+	app.sys.bt_bat = -1;
 	retry = lv_timer_create(try_connect, 2000, NULL);
 	try_connect(NULL);
 }

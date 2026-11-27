@@ -118,7 +118,7 @@ const struct set_def set_defs[] = {
 
 	B("bt.enabled", "0", "bluetooth", "Bluetooth"),
 	B("bt.autoreconnect", "1", "bluetooth", "Reconnect automatically"),
-	B("bt.battery", "0", "", "Headphone battery (hands-free link)"),
+	B("bt.battery", "1", "bluetooth", "Headphone battery"),
 
 	E("sys.mode", "player", "player=Player|usbdac=USB DAC", "", "Boot mode"),
 };

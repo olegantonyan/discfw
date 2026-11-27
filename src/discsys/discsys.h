@@ -26,6 +26,8 @@ struct sys {
 	enum output output;
 	int outputs_enabled;
 	char bt_dev[24];
+	char bt_name[64];
+	int bt_bat;
 	int sleep_left_s;
 	bool shutting_down;
 	gint64 last_activity;

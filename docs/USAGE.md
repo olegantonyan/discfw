@@ -73,7 +73,8 @@ These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folde
 
 ## Bluetooth headphones
 
-- On the player: Settings → Bluetooth → Devices. Search, pair (then trust and connect), connect, disconnect, forget. Shows the headset battery when the headset reports it.
+- On the player: Settings → Bluetooth → Devices. Search, pair (then trust and connect), connect, disconnect, forget.
+- Headphone battery: shown in the status bar, on the lock screen and in the device list, with a warning at 20 %. Headphones report it over the hands-free link (HFP), so with `bt.battery` on (default) bluez-alsa also runs as an HFP audio gateway; the player itself never opens a call audio channel. Turn it off for A2DP only.
 - Pairing is accepted only within 35 s after you start it on the player.
 - Codecs: SBC, aptX, aptX HD (bluez-alsa). When headphones connect, MPD switches to them; when they disconnect, playback pauses, so no sound comes out of the jack by surprise. Paired headphones reconnect by themselves.
 - From the PC over USB: `scripts/disc-bt on | off | scan [SECS] | pair MAC | connect MAC | disconnect [MAC] | forget MAC | list | status`.

@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 #define MAX_DEPTH 16
+#define STATUS_Y 12
+#define STATUS_MAX_W 146
 
 static struct entry {
 	const struct screen_ops *ops;
@@ -127,12 +129,29 @@ static const char *battery_symbol(int cap)
 	return cap >= 90 ? LV_SYMBOL_BATTERY_FULL : cap >= 65 ? LV_SYMBOL_BATTERY_3 : cap >= 40 ? LV_SYMBOL_BATTERY_2 : cap >= 15 ? LV_SYMBOL_BATTERY_1 : LV_SYMBOL_BATTERY_EMPTY;
 }
 
+static void status_text(const char *clock, bool mark, bool glyph, bool powered)
+{
+	char bat[48] = "", bt[24] = "";
+	const char *pre = !strcmp(app.bat.state, "charging") ? LV_SYMBOL_CHARGE : powered ? LV_SYMBOL_USB : "";
+
+	if (app.bat.valid && glyph)
+		snprintf(bat, sizeof(bat), "%s%s%s %d%%", pre, pre[0] ? " " : "", battery_symbol(app.bat.cap), app.bat.cap);
+	else if (app.bat.valid)
+		snprintf(bat, sizeof(bat), "%s%d%%", pre, app.bat.cap);
+	if (app.sys.bt_bat >= 0)
+		snprintf(bt, sizeof(bt), " " LV_SYMBOL_BLUETOOTH "%d%%", app.sys.bt_bat);
+	else if (app.sys.out_bt)
+		snprintf(bt, sizeof(bt), "  " LV_SYMBOL_BLUETOOTH);
+	lv_label_set_text_fmt(status, "%s%s%s%s%s", clock, mark ? "?" : "", !clock[0] ? "" : app.sys.bt_bat >= 0 ? " " : "   ", bat, bt);
+	lv_obj_update_layout(status);
+}
+
 static void status_update(uint32_t evs, void *ctx)
 {
-	char clock[16] = "", bat[48] = "";
+	char clock[16] = "";
 	time_t now = time(NULL);
 	struct tm tm;
-	bool powered = app.bat.valid && strcmp(app.bat.state, "battery");
+	bool powered = app.bat.valid && strcmp(app.bat.state, "battery"), mark;
 
 	(void)evs;
 	(void)ctx;
@@ -141,11 +160,12 @@ static void status_update(uint32_t evs, void *ctx)
 	localtime_r(&now, &tm);
 	if (tm.tm_year >= 125 && (time_synced() || strcmp(set_get("lock.unsynced"), "hide")))
 		strftime(clock, sizeof(clock), set_get_bool("time.24h") ? "%H:%M" : "%I:%M", &tm);
-	if (app.bat.valid)
-		snprintf(bat, sizeof(bat), "%s%s %d%%", !strcmp(app.bat.state, "charging") ? LV_SYMBOL_CHARGE " " : powered ? LV_SYMBOL_USB " " : "",
-			 battery_symbol(app.bat.cap), app.bat.cap);
-	lv_label_set_text_fmt(status, "%s%s%s%s%s", clock, clock[0] && !time_synced() ? "?" : "", clock[0] ? "   " : "", bat,
-			      app.sys.out_bt ? "  " LV_SYMBOL_BLUETOOTH : "");
+	mark = clock[0] && !time_synced();
+	status_text(clock, mark, true, powered);
+	if (lv_obj_get_width(status) > STATUS_MAX_W && powered)
+		status_text(clock, mark, false, powered);
+	if (lv_obj_get_width(status) > STATUS_MAX_W)
+		status_text(clock, false, !powered, powered);
 	lv_obj_set_style_text_color(status, !powered && app.bat.valid && app.bat.cap <= 10 ? lv_palette_main(LV_PALETTE_RED) : lv_color_hex(0xc0c0c0), 0);
 }
 
@@ -169,7 +189,7 @@ void nav_start(void)
 	const struct screen_ops *target = NULL;
 
 	status = ui_label(lv_layer_top(), &lv_font_montserrat_14, "");
-	lv_obj_align(status, LV_ALIGN_TOP_MID, 0, 8);
+	lv_obj_align(status, LV_ALIGN_TOP_MID, 0, STATUS_Y);
 	lv_obj_set_clickable(status, false);
 	app_listen(status, EV_BAT | EV_SECOND | EV_SYS | EV_SETTINGS | EV_VOLUME, status_update, NULL);
 	shade_init();
