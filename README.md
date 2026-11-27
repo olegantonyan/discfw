@@ -95,6 +95,8 @@ sudo apt install build-essential bc bzip2 cpio curl file git libusb-1.0-0 patch 
 
 On Fedora add `glibc-static`, on openSUSE add `glibc-devel-static`.
 
+Or build with only Docker or Podman: see [Build in a container](#build-in-a-container). Flashing still needs Python with `venv`, `curl`, `libusb-1.0` and the static C library on the PC.
+
 ## Build
 
 ```
@@ -118,6 +120,16 @@ The results are in `output/images/`:
 - `rootfs.squashfs`, `xImage-stock-v257` (FiiO's kernel, not flashed), `sha256sums.txt`.
 
 Other targets: `make menuconfig`, `make savedefconfig`, `make br-<target>` (for example `make br-discui-rebuild`).
+
+### Build in a container
+
+Instead of the packages above, the build needs only Docker or Podman:
+
+```
+scripts/docker-build
+```
+
+It builds a Debian 12 image with the build tools and runs `make` in it. Arguments run another command instead, for example `scripts/docker-build make menuconfig` or `scripts/docker-build make br-discui-rebuild`. The checkout is mounted into the container at the same path, so `dl/`, `buildroot/` and `output/` stay on the PC and the results are in `output/images/` as above; ccache uses `~/.buildroot-ccache`. It uses Podman if installed; `DISC_ENGINE=docker` picks Docker. A build on the PC and a container build cannot share `output/`: run `rm -rf output` to switch.
 
 ## Flash
 
@@ -161,7 +173,7 @@ Then the same steps 4–6. This writes FiiO's original V2.57 root file system fr
 
 - **Music:** put music files on a microSD card (exFAT or FAT32) with a card reader. discfw adds a new card to its library by itself; folders play at once, even before the scan ends.
 - **Wi-Fi:** on the player, open Settings → Wi-Fi → Networks, pick your network and type the password. The Wi-Fi status page shows the IP address and the host name (`snowsky-disk-XXXX`).
-- **SSH:** connect the player to the PC with USB and run `scripts/disc-ssh-key` once. It copies your public key over the USB shell. Then use `ssh -4 root@snowsky-disk-XXXX.local`. Password login is off.
+- **SSH:** set a password in Settings → Wi-Fi → SSH password and log in with `ssh -4 root@snowsky-disk-XXXX.local`. For key login, use `ssh-copy-id`, copy your `.pub` file into an `SSH` folder on the microSD card, or run `scripts/disc-ssh-key` over USB.
 - **MPD apps:** any MPD client can connect to port 6600 of the player.
 - **USB root shell:** `scripts/disc-sh` (your user needs access to serial ports, often the `dialout` or `uucp` group).
 

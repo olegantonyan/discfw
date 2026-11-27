@@ -1,0 +1,27 @@
+#!/bin/sh
+# Usage: scripts/docker-build [command ...]. Runs make (or the command) in a build container; needs only Docker or Podman.
+set -eu
+TOP=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+IMAGE=discfw-build
+CCACHE=$HOME/.buildroot-ccache
+if [ -n "${DISC_ENGINE:-}" ]; then
+	ENGINE=$DISC_ENGINE
+elif command -v podman > /dev/null; then
+	ENGINE=podman
+else
+	ENGINE=docker
+fi
+if [ -d "$TOP/output/host" ] && [ ! -e "$TOP/output/.container" ]; then
+	echo "docker-build: output/ is from a build on the PC; remove it first: rm -rf output" >&2
+	exit 1
+fi
+mkdir -p "$TOP/output" "$CCACHE"
+touch "$TOP/output/.container"
+echo "docker-build: preparing the $IMAGE image with $ENGINE" >&2
+"$ENGINE" build -q -t "$IMAGE" --build-arg UID="$(id -u)" --build-arg GID="$(id -g)" "$TOP/docker" > /dev/null
+[ $# -gt 0 ] || set -- make
+USERNS=
+[ "$("$ENGINE" info -f '{{.Host.Security.Rootless}}' 2> /dev/null)" = true ] && USERNS=--userns=keep-id
+TTY=
+[ -t 0 ] && [ -t 1 ] && TTY=-it
+exec "$ENGINE" run --rm --init $TTY $USERNS --security-opt label=disable -v "$TOP:$TOP" -v "$CCACHE:/ccache" -e BR2_CCACHE_DIR=/ccache -w "$TOP" "$IMAGE" "$@"

@@ -17,6 +17,7 @@ patches/buildroot/        patches for Buildroot itself
 patches/packages/         patches for Buildroot packages (MPD, mdnsd, glib, linux-headers, brcm-patchram-plus)
 scripts/                  PC tools: flash, USB shell, test without flashing, Wi-Fi, Bluetooth, host build
 scripts/device/           test scripts installed on the player in /usr/libexec/discfw-test/
+docker/Dockerfile         build image for scripts/docker-build
 docs/                     this documentation
 ```
 
@@ -24,6 +25,7 @@ docs/                     this documentation
 
 - `make` downloads Buildroot 2026.02.3 into `dl/`, checks its SHA-256, applies `patches/buildroot/`, loads `configs/disc_defconfig` and builds into `output/`. All downloads go to `dl/`, which you can keep between builds.
 - `make br-<target>` runs any Buildroot target, for example `make br-discui-rebuild`, `make br-menuconfig`, `make br-legal-info`. `make menuconfig` and `make savedefconfig` work as usual.
+- `scripts/docker-build [command]` runs `make` (or the command) in a Debian 12 container as your user, with the checkout mounted at its own path and `~/.buildroot-ccache` as ccache. It refuses an `output/` built on the PC.
 - ccache is on (`~/.buildroot-ccache`).
 - `board/disc/check-abi.sh` fails the build if any ELF file is not NaN2008 + FP64.
 - `board/disc/post-image.sh` pads `rootfs.squashfs` to the writer's fixed 96 MiB (`disc-rootfs-96M.bin`) and writes `sha256sums.txt`.

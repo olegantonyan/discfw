@@ -4,7 +4,7 @@ M=/media/sd
 [ "$(cat /run/discfw.mode 2>/dev/null)" = storage ] && exit 0
 for i in $(seq 1 50); do
 	for d in /dev/mmcblk0p1 /dev/mmcblk0; do
-		[ -b $d ] && mount -o ro,iocharset=utf8 $d $M 2>/dev/null && exit 0
+		[ -b $d ] && mount -o ro,iocharset=utf8 $d $M 2>/dev/null && exec /usr/libexec/discfw/ssh-import
 	done
 	sleep 0.1
 done

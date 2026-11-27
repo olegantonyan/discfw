@@ -1,0 +1,52 @@
+#!/bin/sh
+# dropbear SSH/SFTP (setting net.ssh). Root password logins only while net.ssh_password is set.
+P=/var/run/dropbear.pid
+cfg() { discfw cfg "$1"; }
+
+set_root_hash() {
+	umask 077
+	if ! grep -q " /etc/shadow " /proc/mounts; then
+		cp /etc/shadow /run/shadow && mount --bind /run/shadow /etc/shadow || return 1
+	fi
+	sed "s|^root:[^:]*:|root:$1:|" /run/shadow > /run/shadow.new && cat /run/shadow.new > /run/shadow
+	rm -f /run/shadow.new
+}
+
+start() {
+	[ "$(cfg net.ssh)" = 1 ] || return 0
+	pw=$(cfg net.ssh_password)
+	h=
+	args="-R -s"
+	if [ -n "$pw" ]; then
+		h=$(printf '%s\n' "$pw" | mkpasswd -m sha512)
+		case "$h" in '$6$'*) args=-R ;; *) h='*' ;; esac
+	fi
+	set_root_hash "$h"
+	printf "Starting dropbear sshd: "
+	umask 077
+	start-stop-daemon -S -q -p $P --exec /usr/sbin/dropbear -- $args && echo OK || echo FAIL
+}
+
+stop() {
+	pid=$(cat $P 2>/dev/null)
+	printf "Stopping dropbear sshd: "
+	start-stop-daemon -K -q -p $P && echo OK || echo FAIL
+	i=0
+	while [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ $i -lt 30 ]; do
+		sleep 0.1
+		i=$((i + 1))
+	done
+}
+
+case "$1" in
+start) start ;;
+stop) stop ;;
+restart | reload)
+	stop
+	start
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+	;;
+esac

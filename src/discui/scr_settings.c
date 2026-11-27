@@ -120,7 +120,7 @@ static void value_text(const struct set_def *d, char *out, size_t len)
 			snprintf(out, len, "%s", v);
 		break;
 	case SET_STR:
-		snprintf(out, len, "%s", !strcmp(d->key, "net.mpd_password") && v[0] ? "••••" : v[0] ? v : "(empty)");
+		snprintf(out, len, "%s", strstr(d->key, "password") && v[0] ? "••••" : v[0] ? v : "(empty)");
 		break;
 	}
 }
@@ -409,7 +409,7 @@ static void edit_setting(const struct set_def *d)
 		free(labels);
 		break;
 	case SET_STR:
-		ui_text_input(d->label, set_get(d->key), !strcmp(d->key, "net.mpd_password"), str_set, (void *)d);
+		ui_text_input(d->label, set_get(d->key), strstr(d->key, "password"), str_set, (void *)d);
 		break;
 	}
 }

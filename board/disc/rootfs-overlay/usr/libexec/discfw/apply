@@ -6,6 +6,6 @@ case "$1" in
 wifi.enabled) [ "$v" = 1 ] && $L/wifi on || $L/wifi off ;;
 bt.enabled | bt.battery) [ "$(discfw cfg bt.enabled)" = 1 ] && $L/bt on || $L/bt off ;;
 net.mpd | net.mpd_password | play.replaygain | audio.spdif) killall mpd 2>/dev/null ;;
-net.ssh) [ "$v" = 1 ] && /etc/init.d/S50dropbear start || /etc/init.d/S50dropbear stop ;;
+net.ssh | net.ssh_password) /etc/init.d/S50dropbear restart ;;
 *) exit 2 ;;
 esac

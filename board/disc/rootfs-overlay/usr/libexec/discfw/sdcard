@@ -7,7 +7,7 @@ case "$ACTION" in
 add)
 	grep -q " $M " /proc/mounts && exit 0
 	[ "$MDEV" = mmcblk0 ] && [ -e /dev/mmcblk0p1 ] && exit 0
-	mount -o ro,iocharset=utf8 "/dev/$MDEV" $M 2>/dev/null && logger -t sdcard "mounted $MDEV"
+	mount -o ro,iocharset=utf8 "/dev/$MDEV" $M 2>/dev/null && logger -t sdcard "mounted $MDEV" && /usr/libexec/discfw/ssh-import
 	;;
 remove)
 	grep -q "^/dev/$MDEV $M " /proc/mounts || exit 0

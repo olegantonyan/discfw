@@ -1,0 +1,47 @@
+Do not kill the session on a bad timestamp or an unreadable directory entry.
+SFTP v3 times are clamped to 0..UINT32_MAX (the stock kernel sets the clock from an invalid RTC before
+discfw corrects it, so early sysfs/tmpfs inodes are dated 1960). READDIR skips entries lstat rejects,
+like OpenSSH sftp-server (some exFAT entries list but fail lookup).
+
+--- a/v3.c	2022-01-08 11:25:41.000000000 +0100
++++ b/v3.c	2026-11-27 23:33:34.650325163 +0100
+@@ -84,6 +84,10 @@
+   }
+ }
+ 
++static uint32_t v3_time(int64_t s) {
++  return s < 0 ? 0 : s > (int64_t)UINT32_MAX ? UINT32_MAX : (uint32_t)s;
++}
++
+ static void v3_sendattrs(struct sftpjob *job, const struct sftpattr *attrs) {
+   uint32_t v3bits, m, a;
+ 
+@@ -110,17 +114,8 @@
+   if(v3bits & SSH_FILEXFER_ATTR_PERMISSIONS)
+     sftp_send_uint32(job->worker, attrs->permissions);
+   if(v3bits & SSH_FILEXFER_ACMODTIME) {
+-    m = attrs->mtime.seconds;
+-    a = attrs->atime.seconds;
+-    /* Check that the conversion was sound.  SFTP v3 becomes unsound in 2038CE.
+-     * If you're looking at this code then, I suggest using a later protocol
+-     * version.  If that's not acceptable, and you either don't care about
+-     * bogus timestamps or have some other workaround, then delete the
+-     * checks. */
+-    if(m != attrs->mtime.seconds)
+-      sftp_fatal("sending out-of-range mtime");
+-    if(a != attrs->atime.seconds)
+-      sftp_fatal("sending out-of-range mtime");
++    m = v3_time(attrs->mtime.seconds);
++    a = v3_time(attrs->atime.seconds);
+     sftp_send_uint32(job->worker, a);
+     sftp_send_uint32(job->worker, m);
+   }
+@@ -450,7 +445,7 @@
+     strcat(fullpath, "/");
+     strcat(fullpath, childpath);
+     if(lstat(fullpath, &sb))
+-      return HANDLER_ERRNO;
++      continue;
+     sftp_stat_to_attrs(job->a, &sb, &d[n], 0xFFFFFFFF, childpath);
+     d[n].name = childpath;
+     ++n;

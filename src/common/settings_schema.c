@@ -124,6 +124,7 @@ const struct set_def set_defs[] = {
 	B("net.mpd", "1", "wifi", "MPD over network"),
 	S("net.mpd_password", "", "wifi", "MPD password"),
 	B("net.ssh", "1", "wifi", "SSH / SFTP"),
+	S("net.ssh_password", "", "wifi", "SSH password"),
 
 	B("bt.enabled", "0", "bluetooth", "Bluetooth"),
 	B("bt.autoreconnect", "1", "bluetooth", "Reconnect automatically"),

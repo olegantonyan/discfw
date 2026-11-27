@@ -57,16 +57,20 @@ These settings are shown but **do nothing yet**: `time.ntp`, `audio.pause_bt_los
 ## Wi-Fi
 
 - On the player: Settings → Wi-Fi → Networks. Scan, connect (a keyboard opens for the password), change the password, forget, hidden networks, status details. The password itself is never stored, only the WPA key made from it.
-- The status page shows the IP address and the host name `snowsky-disk-XXXX` (the last 4 hex digits of the Wi-Fi MAC address). The player announces itself by mDNS as `snowsky-disk-XXXX.local` with SSH, SFTP and MPD services. The clock is set by NTP after each DHCP lease.
+- The status page shows the IP address and the host name `snowsky-disk-XXXX` (the last 4 hex digits of the Wi-Fi MAC address). The player announces itself by mDNS as `snowsky-disk-XXXX.local` with SSH, SFTP and MPD services, and as `_discfw._tcp` with TXT `model` and `version` (the build time): `avahi-browse -rt _discfw._tcp` lists every player on the network. The clock is set by NTP after each DHCP lease.
 - From the PC over USB: `scripts/disc-wifi add "SSID"` (asks for the password), `scripts/disc-wifi remove SSID | list | status | on | off`.
 - On the player: `discfw wifi status | scan | list | connect ssid=S [pass=P] [hidden=1] | forget ssid=S`.
 - Turning Wi-Fi on or off restarts only Wi-Fi.
 
 ## SSH and SFTP
 
-- Keys only, no passwords. `scripts/disc-ssh-key [PUBKEY]` installs your key (default: `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub` or `id_rsa.pub`) over the USB shell.
+- Keys, three ways:
+  - `ssh-copy-id -o AddressFamily=inet root@snowsky-disk-XXXX.local`, once the SSH password is set.
+  - Copy the public key file (e.g. `id_ed25519.pub`) into a folder `SSH` on the microSD card. The player adds every key it finds there when the card mounts, and skips keys it already has. Keys stay on the card: remove the file to stop it from being added again.
+  - `scripts/disc-ssh-key [PUBKEY]` over the USB shell (default: `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub` or `id_rsa.pub`).
+- Password: Settings → Wi-Fi → SSH password (setting `net.ssh_password`) allows root password logins. Empty (the default) means keys only. Like the MPD password, it is stored in plain text in `settings`. The USB shell never asks for it.
 - `ssh -4 root@snowsky-disk-XXXX.local`. Use `-4` (or `AddressFamily inet`) because the player has no IPv6.
-- SFTP works with any client. Setting `net.ssh` turns the SSH server off.
+- SFTP works with any client. It starts in `/root`, which links to the card (`sd`) and to the player's settings and state (`discfw`). KDE Dolphin lists the player under Network with kio-zeroconf installed (openSUSE package `kdnssd`). Setting `net.ssh` turns the SSH server off.
 
 ## MPD
 

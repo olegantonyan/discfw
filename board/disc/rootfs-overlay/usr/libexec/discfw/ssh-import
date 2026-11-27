@@ -1,0 +1,14 @@
+#!/bin/sh
+# Adds the SSH public keys found in files under <card>/SSH/ to root's authorized_keys. Called after the card mounts.
+A=/usr/data/discfw/ssh/root/authorized_keys
+umask 077
+for f in /media/sd/SSH/*; do
+	[ -f "$f" ] || continue
+	tr -d '\r' < "$f" | while IFS= read -r k || [ -n "$k" ]; do
+		case "$k" in ssh-* | ecdsa-* | sk-*) ;; *) continue ;; esac
+		grep -qxF "$k" $A 2>/dev/null && continue
+		[ -s $A ] && [ -n "$(tail -c1 $A)" ] && echo >> $A
+		echo "$k" >> $A && logger -t ssh "key added from ${f#/media/sd/}"
+	done
+done
+exit 0

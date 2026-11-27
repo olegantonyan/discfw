@@ -1,5 +1,5 @@
 #!/bin/sh
-# Authorize a public key for root SSH/SFTP on the player (password logins are disabled). Usage: disc-ssh-key [PUBKEY_FILE]
+# Authorize a public key for root SSH/SFTP on the player. Usage: disc-ssh-key [PUBKEY_FILE]
 set -e
 cd "$(dirname "$0")/.."
 f=${1:-$(ls ~/.ssh/id_ed25519.pub ~/.ssh/id_ecdsa.pub ~/.ssh/id_rsa.pub 2>/dev/null | head -1)}
