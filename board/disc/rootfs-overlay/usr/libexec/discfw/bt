@@ -4,8 +4,11 @@ S=/usr/data/discfw/bluetooth
 B="bluetoothctl"
 
 restart() {
-	/etc/init.d/S35radio stop
-	/etc/init.d/S35radio start-fg
+	if [ -e $S/enabled ]; then
+		/etc/init.d/S35radio bt on
+	else
+		/etc/init.d/S35radio bt off
+	fi
 }
 
 ready() {

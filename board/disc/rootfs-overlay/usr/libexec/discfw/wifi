@@ -15,8 +15,7 @@ apply() {
 	if [ -e $S/enabled ] && [ -S /run/wpa_supplicant/wlan0 ]; then
 		wpa_cli -i wlan0 reconfigure > /dev/null
 	else
-		/etc/init.d/S35radio stop
-		/etc/init.d/S35radio start-fg
+		/etc/init.d/S35radio wifi on
 	fi
 }
 
@@ -34,7 +33,11 @@ remove)
 	apply
 	;;
 list)
-	sed -n 's/^\tssid=//p' $C | while read -r h; do unhex "$h"; echo; done
+	if [ -S /run/wpa_supplicant/wlan0 ]; then
+		wpa_cli -i wlan0 list_networks | tail -n +2 | cut -f2
+	else
+		sed -n 's/^\tssid=//p' $C
+	fi
 	;;
 status)
 	[ -e $S/enabled ] && echo "enabled" || echo "disabled"
@@ -49,8 +52,7 @@ on)
 	;;
 off)
 	rm -f $S/enabled
-	/etc/init.d/S35radio stop
-	/etc/init.d/S35radio start-fg
+	/etc/init.d/S35radio wifi off
 	;;
 *)
 	echo "usage: wifi add SSIDHEX psk=HEX|key_mgmt=NONE | remove SSIDHEX | list | status | on | off" >&2

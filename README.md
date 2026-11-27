@@ -62,8 +62,11 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
   formatted — if it will not mount, a tmpfs stands in). Holds `wifi/`, `bluetooth/` (BlueZ pairings via
   `/var/lib/bluetooth`), `ssh/` (host keys, `root/authorized_keys`), `mpd/` (state, playlists), `hostname`, `clock`,
   `charge_limit`.
-- Wi-Fi: `scripts/disc-wifi add "SSID"` (prompts; derives the WPA key on the host, only the key reaches the player),
-  `remove SSID | list | status | on | off`. Hostname `snowsky-disk-XXXX` (last 4 hex of the Wi-Fi MAC), announced by
+- Wi-Fi: on the player, Settings → Wi-Fi → Networks (or hold the Wi-Fi toggle in the shade): scan, connect (keyboard
+  for the password; discsys derives the WPA key, the passphrase is never stored), change password, forget, hidden
+  networks, status details. discsys talks to `wpa_supplicant`'s control socket; `discfw wifi status | scan | list |
+  connect ssid=S [pass=P] [hidden=1] | forget ssid=S`. From the host: `scripts/disc-wifi add "SSID"`,
+  `remove SSID | list | status | on | off`. Toggling Wi-Fi restarts only Wi-Fi (`S35radio wifi on|off`). Hostname `snowsky-disk-XXXX` (last 4 hex of the Wi-Fi MAC), announced by
   `mdnsd` as `snowsky-disk-XXXX.local` with `_ssh`, `_sftp-ssh`, `_mpd` services; NTP after each DHCP lease.
 - SSH/SFTP (dropbear + gesftpserver), keys only: `scripts/disc-ssh-key [PUBKEY]`.
 - MPD on TCP 6600 (setting `net.mpd`, optional password `net.mpd_password`) as well as `/run/mpd.sock`;
@@ -73,7 +76,11 @@ reboots → mask-ROM → `scripts/disc-flash stock`. If the writer result is unk
 - Settings: `/usr/data/discfw/settings` (`key=value`, only non-defaults). Schema with ranges and choices:
   `src/common/settings_schema.c`. `discfw list [prefix]`, `discfw get|set|reset KEY`, `discfw cfg KEY` (reads the
   file without the daemon). Changes apply at once (discd reloads, MPD restarts for network keys, radios restart).
-- Bluetooth headphones: `scripts/disc-bt on | scan | pair MAC | connect MAC | forget MAC | list | status | off`.
+- Bluetooth headphones: on the player, Settings → Bluetooth → Devices (or hold the Bluetooth toggle in the shade):
+  search, pair (then trust and connect), connect, disconnect, forget, battery when the headset reports it. discsys
+  uses BlueZ over D-Bus with its own agent, which accepts pairing only within 35 s of a pair started on the player.
+  `discfw bt list | scan [SECS] | pair|connect|disconnect|forget MAC`. From the host: `scripts/disc-bt on | scan |
+  pair MAC | connect MAC | forget MAC | list | status | off`. Toggling Bluetooth restarts only Bluetooth.
   bluez-alsa A2DP source (SBC, aptX, aptX HD); `discbt` moves MPD to the `BT` output while a sink is connected and
   pauses when it disconnects (nothing leaks out of the jack); bonded headphones reconnect by themselves. Verified
   2026-11-25 with UGREEN Studio Pro (SBC). Headphone buttons (AVRCP) do not control playback yet: no `uinput`.

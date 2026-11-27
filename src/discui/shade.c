@@ -104,8 +104,25 @@ void shade_lift(int dy, bool released)
 		lv_obj_set_y(shade, 0);
 }
 
+static bool held;
+
+static void radio_hold(lv_event_t *e)
+{
+	if (lv_event_get_code(e) == LV_EVENT_PRESSED) {
+		held = false;
+		return;
+	}
+	held = true;
+	shade_close();
+	nav_open(lv_event_get_current_target_obj(e) == wifi ? &scr_wifi : &scr_bt, NULL);
+}
+
 static void ctl(lv_event_t *e)
 {
+	if (held) {
+		held = false;
+		return;
+	}
 	switch ((int)(intptr_t)lv_event_get_user_data(e)) {
 	case 0:
 		mpdc_prev();
@@ -231,6 +248,10 @@ void shade_init(void)
 	r = row(156, 300, 50);
 	wifi = small_button(r, LV_SYMBOL_WIFI, 46, ctl, 3);
 	bt = small_button(r, LV_SYMBOL_BLUETOOTH, 46, ctl, 4);
+	for (int i = 0; i < 2; i++) {
+		lv_obj_add_event_cb(i ? bt : wifi, radio_hold, LV_EVENT_PRESSED, NULL);
+		lv_obj_add_event_cb(i ? bt : wifi, radio_hold, LV_EVENT_LONG_PRESSED, NULL);
+	}
 	order = small_button(r, LV_SYMBOL_LOOP, 46, ctl, 5);
 	small_button(r, LV_SYMBOL_EYE_CLOSE, 46, ctl, 6);
 

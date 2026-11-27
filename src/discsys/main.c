@@ -57,6 +57,7 @@ int main(int argc, char **argv)
 	keys_init();
 	power_init();
 	library_init();
+	bt_init();
 	mpdc_init();
 	g_unix_signal_add(SIGTERM, on_term, NULL);
 	g_unix_signal_add(SIGINT, on_term, NULL);

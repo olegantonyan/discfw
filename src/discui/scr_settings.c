@@ -31,7 +31,7 @@ enum kind { R_SET, R_ACTION, R_INFO, R_PAGE };
 
 enum action {
 	A_SCAN, A_RESCAN, A_LIB_RESET, A_REBOOT, A_POWEROFF, A_RESTART_UI, A_RESET_UI, A_RESET_SETTINGS, A_ZONE, A_PROFILE,
-	A_SLEEP
+	A_SLEEP, A_WIFI, A_BT
 };
 
 struct srow {
@@ -269,6 +269,10 @@ static void build(struct spage *p)
 		system_rows(p);
 	else if (!strcmp(p->id, "library"))
 		library_rows(p);
+	if (!strcmp(p->id, "wifi"))
+		add_action(p, A_WIFI, "Networks", NULL);
+	if (!strcmp(p->id, "bluetooth"))
+		add_action(p, A_BT, "Devices", NULL);
 	if (!strcmp(p->id, "playback"))
 		add_action(p, A_SLEEP, app.sys.sleep_left ? "Sleep timer (running)" : "Sleep timer", NULL);
 	add_settings(p, p->id);
@@ -280,8 +284,6 @@ static void build(struct spage *p)
 		for (int i = 0; i < 4; i++)
 			add_action(p, A_PROFILE, profile_titles[i], profiles[i]);
 	}
-	if (!strcmp(p->id, "wifi") || !strcmp(p->id, "bluetooth"))
-		add_info(p, "Networks and devices: use disc-wifi / disc-bt on the host until the manager lands");
 }
 
 static int count(void *ctx)
@@ -485,6 +487,12 @@ static void click(void *ctx, int idx)
 		break;
 	case A_SLEEP:
 		ui_pick("Sleep timer", sleep_labels, 7, -1, sleep_picked, NULL);
+		break;
+	case A_WIFI:
+		nav_push(&scr_wifi, NULL);
+		break;
+	case A_BT:
+		nav_push(&scr_bt, NULL);
 		break;
 	}
 }

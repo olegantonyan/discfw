@@ -221,6 +221,24 @@ static void handle(struct client *cl, char *line)
 			err(cl, e->message);
 			g_error_free(e);
 		}
+	} else if (!strcmp(cmd, "wifi") || !strcmp(cmd, "bt")) {
+		char ssid[160] = "", pass[160] = "", mac[32] = "", e[160] = "";
+		struct kvbuf out;
+		int r;
+		kv_get(line, "ssid", ssid, sizeof(ssid));
+		kv_get(line, "pass", pass, sizeof(pass));
+		kv_get(line, "mac", mac, sizeof(mac));
+		if (!mac[0])
+			kv_word(line, 2, mac, sizeof(mac));
+		kv_init(&out);
+		r = cmd[0] == 'w' ? wifi_command(a1, ssid, pass, kv_get_int(line, "hidden", 0), &out, e, sizeof(e)) : bt_command(a1, mac, &out, e, sizeof(e));
+		if (out.s)
+			lc_puts(&cl->c, out.s);
+		kv_free(&out);
+		if (r)
+			err(cl, e);
+		else
+			ok(cl);
 	} else if (!strcmp(cmd, "toast")) {
 		ev_toast(rest_of_line(line, 1));
 		ok(cl);

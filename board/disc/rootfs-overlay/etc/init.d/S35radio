@@ -82,10 +82,18 @@ stop() {
 	wifi_stop
 }
 
+radio() {
+	driver || { logger -t radio "bcmdhd failed to load"; return 1; }
+	"${1}_stop"
+	[ "$2" = on ] && "${1}_start"
+	return 0
+}
+
 case "$1" in
 start) (start) > /dev/null 2>&1 & ;;
 start-fg) start ;;
 stop) stop ;;
 restart) stop; start ;;
-*) echo "Usage: $0 {start|stop|restart}" >&2; exit 1 ;;
+wifi | bt) radio "$1" "$2" ;;
+*) echo "Usage: $0 {start|stop|restart|wifi on|off|bt on|off}" >&2; exit 1 ;;
 esac

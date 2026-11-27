@@ -68,6 +68,10 @@ bool library_update(const char *reason);
 bool library_mounted(void);
 
 void hw_init(void);
+void bt_init(void);
+int bt_command(const char *verb, const char *mac, struct kvbuf *out, char *err, size_t errlen);
+int wifi_command(const char *verb, const char *ssid, const char *pass, bool hidden, struct kvbuf *out, char *err, size_t errlen);
+void wifi_psk(const char *pass, const char *ssid, char out[65]);
 int hw_request(const char *cmd, char *reply, size_t len);
 void hw_volpct(int pct);
 
