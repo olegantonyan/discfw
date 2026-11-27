@@ -1,7 +1,8 @@
 #!/bin/sh
 # Squashfs has no data checksums and a NAND read sometimes comes back wrong (seen on the first boot after a flash: a
 # shifted 16-byte burst). The bad page stays in the page cache, so a program then segfaults or fails to exec on every
-# restart. When crashes or squashfs read errors keep coming, drop the cache so the data is read again.
+# restart. When crashes or squashfs read errors keep coming, drop the cache so the data is read again. Also saves the
+# clock every 10 minutes, so a hard reset that clears the RTC loses at most that much.
 count() { dmesg | grep -c -e 'sending SIG' -e 'SQUASHFS error'; }
 last=$(count)
 if [ "$last" -gt 0 ]; then
@@ -9,7 +10,12 @@ if [ "$last" -gt 0 ]; then
 	sync
 	echo 3 > /proc/sys/vm/drop_caches
 fi
+n=0
 while sleep 10; do
+	n=$((n + 1))
+	if [ $((n % 60)) = 0 ] && grep -q " /usr/data " /proc/mounts; then
+		date +%s > /usr/data/discfw/clock.new && mv /usr/data/discfw/clock.new /usr/data/discfw/clock
+	fi
 	now=$(count)
 	if [ $((now - last)) -ge 3 ]; then
 		logger -t guard "$((now - last)) crashes or squashfs errors in 10 s; dropping page cache"

@@ -1,4 +1,7 @@
 #!/bin/sh
+# Keeps U-Boot's logo on screen (the image is one corner pixel) and adds a progress bar that rcS advances.
 [ "$1" = start ] || exit 0
-fbsplash -s /usr/share/discfw/splash.ppm -d /dev/fb0
+F=/run/splash.fifo
+rm -f $F
+mkfifo $F && fbsplash -s /usr/share/discfw/splash.ppm -i /etc/fbsplash.cfg -d /dev/fb0 -f $F &
 echo 30 > /sys/class/backlight/backlight/brightness

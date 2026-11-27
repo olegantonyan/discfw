@@ -54,6 +54,8 @@ static void save_pos(struct folders *f)
 {
 	char key[2100];
 
+	if (!dl(f)->ok)
+		return;
 	dir_key(f->path, key, sizeof(key));
 	state_set_int(key, vlist_first(f->list));
 	state_set("folder.path", f->path);

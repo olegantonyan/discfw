@@ -16,7 +16,7 @@
 #define SEARCH_SONGS 100
 
 enum view { V_ROOT, V_SEARCH, V_ARTISTS, V_ALBUMS, V_GENRES, V_COMPOSERS, V_YEARS, V_RECENT, V_HIRES, V_TRACKS };
-enum kind { K_ROOT, K_SECTION, K_DISC, K_NAME, K_ALBUM, K_YEAR, K_SONG };
+enum kind { K_ROOT, K_GAP, K_SCAN, K_SECTION, K_DISC, K_NAME, K_ALBUM, K_YEAR, K_SONG };
 
 struct frame {
 	enum view v;
@@ -44,6 +44,7 @@ struct lib {
 	int *years, *year_n, n_years;
 	struct lrow *rows;
 	int n_rows, cap_rows;
+	unsigned songs;
 };
 
 static const struct {
@@ -301,10 +302,17 @@ static void load(struct lib *l)
 	clear(l);
 	lv_label_set_text(l->title, f->title);
 	switch (f->v) {
-	case V_ROOT:
+	case V_ROOT: {
+		unsigned albums, artists;
+		unsigned long upd, play;
 		for (int i = 0; i < (int)(sizeof(roots) / sizeof(roots[0])); i++)
 			add_row(l, K_ROOT, i);
+		add_row(l, K_GAP, 0);
+		add_row(l, K_SCAN, 0);
+		if (!mpdc_stats(&l->songs, &albums, &artists, &upd, &play))
+			l->songs = 0;
 		break;
+	}
 	case V_ARTISTS:
 	case V_GENRES:
 	case V_COMPOSERS:
@@ -394,6 +402,16 @@ static void row(void *ctx, int idx, struct vrow *r)
 	case K_ROOT:
 		r->icon = LV_SYMBOL_RIGHT;
 		snprintf(r->text, sizeof(r->text), "%s", roots[w->i].label);
+		break;
+	case K_GAP:
+		break;
+	case K_SCAN:
+		r->icon = LV_SYMBOL_REFRESH;
+		snprintf(r->text, sizeof(r->text), "Scan for changes");
+		if (app.mpd.updating)
+			snprintf(r->sub, sizeof(r->sub), "Scanning…");
+		else if (app.mpd.connected)
+			snprintf(r->sub, sizeof(r->sub), "%u song%s", l->songs, l->songs == 1 ? "" : "s");
 		break;
 	case K_SECTION:
 		r->header = true;
@@ -518,6 +536,14 @@ static void click(void *ctx, int idx)
 	struct album *a;
 
 	switch (w->k) {
+	case K_SCAN:
+		if (app.mpd.updating) {
+			ui_toast("Already scanning");
+		} else {
+			sysc_send("library scan");
+			ui_toast("Scanning in background");
+		}
+		break;
 	case K_ROOT:
 		n.v = roots[w->i].v;
 		if (n.v == V_SEARCH) {
@@ -756,7 +782,7 @@ static lv_obj_t *create(void *arg)
 	snprintf(l->st[0].title, sizeof(l->st[0].title), "Library");
 	l->depth = 1;
 	load(l);
-	app_listen(l->scr, EV_DB | EV_SONG, on_event, l);
+	app_listen(l->scr, EV_DB | EV_SONG | EV_UPDATE, on_event, l);
 	lv_obj_add_event_cb(l->scr, on_delete, LV_EVENT_DELETE, l);
 	return l->scr;
 }

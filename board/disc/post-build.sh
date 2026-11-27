@@ -4,7 +4,8 @@ TARGET="$1"
 BOARD="$(dirname "$0")"
 
 mkdir -p "$TARGET/media/sd" "$TARGET/usr/share/discfw"
-python3 -c 'import sys; sys.stdout.buffer.write(b"P6\n360 360\n255\n" + bytes((0, 96, 112)) * 360 * 360)' > "$TARGET/usr/share/discfw/splash.ppm"
+printf 'P6\n1 1\n255\n\0\0\0' > "$TARGET/usr/share/discfw/splash.ppm"
+date +%s > "$TARGET/etc/discfw-build"
 {
 	echo "discfw $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	echo "buildroot $BR2_VERSION_FULL"

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Buildroot's rcS plus the boot progress bar (S01splash).
+splash() { [ -p /run/splash.fifo ] && echo "$1" 1<>/run/splash.fifo; }
+
+n=0
+for i in /etc/init.d/S??*; do n=$((n + 1)); done
+k=0
+for i in /etc/init.d/S??*; do
+	k=$((k + 1))
+	[ ! -f "$i" ] && continue
+	case "$i" in
+	*.sh)
+		(
+			trap - INT QUIT TSTP
+			set start
+			. "$i"
+		)
+		;;
+	*)
+		"$i" start
+		;;
+	esac
+	splash $((k * 100 / n))
+done
+splash exit

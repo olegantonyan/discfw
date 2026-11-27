@@ -30,11 +30,13 @@ start() {
 	hwclock -s -u 2>/dev/null
 	now=$(date +%s)
 	saved=$(cat $S/clock 2>/dev/null)
+	build=$(cat /etc/discfw-build 2>/dev/null)
+	[ -n "$build" ] && { [ -z "$saved" ] || [ "$build" -gt "$saved" ]; } && saved=$build
 	if [ -n "$saved" ] && [ "$saved" -gt "$now" ]; then
 		date -s "@$saved" >/dev/null
 		hwclock -w -u 2>/dev/null
 		rm -f $S/clock.rtc
-		clock="RTC $((saved - now)) s behind the time saved at shutdown, using the saved time"
+		clock="RTC $((saved - now)) s behind the last known time, using that"
 	elif [ -e $S/clock.rtc ]; then
 		touch /run/time.synced
 		clock="RTC holds network time"
@@ -42,6 +44,7 @@ start() {
 		clock="RTC not set from the network since its last reset"
 	fi
 	logger -t clock "$clock"
+	{ tail -n 19 $S/clock.log 2>/dev/null; echo "$(date '+%F %T') rtc=$now known=${saved:-none} $clock"; } > $S/clock.log.new && mv $S/clock.log.new $S/clock.log
 	mode=$(cat $S/mode.next 2>/dev/null || cat $S/mode.default 2>/dev/null)
 	rm -f $S/mode.next
 	case "$mode" in storage | usbdac) ;; *) mode=player ;; esac
