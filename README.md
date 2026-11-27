@@ -10,14 +10,14 @@ What you get today:
 - Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
 - A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
 - Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level and buttons (play, pause, next, previous).
-- USB storage mode (the PC gets the music card) and USB DAC mode (the player is the PC's sound card), S/PDIF output on the 3.5 mm jack.
+- USB storage mode and USB DAC mode, S/PDIF output on the 3.5 mm jack.
 - Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
 - Equalizer: AutoEQ presets from the card, a 10-band graphic EQ and a parametric editor, a preset per output and per Bluetooth headset.
 - Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
 
 ## Goals
 
-1. **Speed.** Short delay before a track starts and on skip. The stock player has a retry loop with 1-second sleeps on track changes and powers the DAC down on pause. discfw keeps the DAC ready: a skip takes about 30–50 ms at the same sample rate and about 300 ms when the rate changes (measured 2026-11-25).
+1. **Speed.** Short delay before a track starts and on skip. The stock player has a retry loop with 1-second sleeps on track changes and powers the DAC down on pause. discfw keeps the DAC ready: a skip takes about 30–50 ms at the same sample rate and about 300 ms when the rate changes.
 2. **Functionality.** Everything the player needs every day, without the stock software. Because the whole user space is open, the player can do much more than the stock software allows: for example streaming audio over the network (RTP), more Bluetooth codecs (such as AAC or LDAC), other MPD plugins, or your own scripts and services.
 3. **UX.** A UI made for the round screen, fast lists, clear settings.
 4. **Easy to tinker with.** All source is here. Root shell over USB, SSH, plain shell scripts, a host build with fake hardware, test scripts that run on the player.
@@ -27,7 +27,7 @@ What you get today:
 
 Works: everything in the list above. See [docs/USAGE.md](docs/USAGE.md) for details.
 
-Not yet: Bluetooth receiver mode, IPv6. The music card is read-only on the player; copy music in USB storage mode or with a card reader. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
+Not yet: Bluetooth receiver mode, IPv6. The music card is read-only on the player. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
 
 ## Hardware
 
@@ -172,7 +172,7 @@ The kernel and the modules are GPL, but FiiO has not published their source [yet
 
 | | diskOS | discfw |
 |---|---|---|
-| Kernel | FiiO stock 4.4 | FiiO stock 4.4 (mainline 7.4 port parked) |
+| Kernel | FiiO stock 4.4 | FiiO stock 4.4 (mainline 7.4 port is the goal) |
 | Root file system | FiiO stock, plus a small patch | own, built from source with Buildroot |
 | Player engine | FiiO's stock `mq_player` | MPD |
 | UI | new UI (replaces `mq_ui`) | new UI (`discui`) |
