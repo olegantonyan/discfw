@@ -15,6 +15,19 @@ What you get today:
 - Equalizer: AutoEQ presets from the card, a 10-band graphic EQ and a parametric editor, a preset per output and per Bluetooth headset.
 - Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
 
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/img/home.png" width="240" alt="Home"> | <img src="docs/img/now-playing.png" width="240" alt="Now playing"> | <img src="docs/img/now-playing-vinyl.png" width="240" alt="Now playing, vinyl cover"> |
+| Home | Now playing | Now playing, vinyl cover |
+| <img src="docs/img/lock.png" width="240" alt="Lock screen"> | <img src="docs/img/shade.png" width="240" alt="Quick controls"> | <img src="docs/img/now-playing-accent.png" width="240" alt="Now playing, amber accent"> |
+| Lock screen | Quick controls (swipe down) | Accent color |
+| <img src="docs/img/folders.png" width="240" alt="Folders"> | <img src="docs/img/album.png" width="240" alt="Album folder"> | <img src="docs/img/library.png" width="240" alt="Library albums"> |
+| Folders | Album folder | Library: albums |
+| <img src="docs/img/playlists.png" width="240" alt="Playlists"> | <img src="docs/img/queue.png" width="240" alt="Queue"> | <img src="docs/img/settings.png" width="240" alt="Settings"> |
+| Playlists | Queue | Settings |
+| <img src="docs/img/settings-display.png" width="240" alt="Display settings"> | <img src="docs/img/equalizer-outputs.png" width="240" alt="Equalizer outputs"> | <img src="docs/img/equalizer.png" width="240" alt="Equalizer editor"> |
+| Display settings | Equalizer per output | Equalizer editor |
+
 ## Goals
 
 1. **Speed.** Short delay before a track starts and on skip. The stock player has a retry loop with 1-second sleeps on track changes and powers the DAC down on pause. discfw keeps the DAC ready: a skip takes about 30–50 ms at the same sample rate and about 300 ms when the rate changes.
