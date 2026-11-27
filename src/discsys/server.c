@@ -93,6 +93,9 @@ static void snapshot(struct client *cl, const char *tag)
 	kv_str(&b, "btdev", sys.bt_dev);
 	kv_str(&b, "btname", sys.bt_name);
 	kv_int(&b, "btbat", sys.bt_bat);
+	kv_str(&b, "mode", mode_name());
+	kv_int(&b, "usb", mode_usb());
+	kv_int(&b, "uacrate", sys.uac_rate);
 	kv_int(&b, "sleep", sys.sleep_left_s);
 	power_status(&b);
 	reply(cl, &b);
@@ -241,6 +244,15 @@ static void handle(struct client *cl, char *line)
 			err(cl, e);
 		else
 			ok(cl);
+	} else if (!strcmp(cmd, "mode")) {
+		char e[96];
+		if (mode_request(a1, e, sizeof(e)))
+			err(cl, e);
+		else
+			ok(cl);
+	} else if (!strcmp(cmd, "uac")) {
+		mode_uac(kv_get_int(line, "rate", 0));
+		ok(cl);
 	} else if (!strcmp(cmd, "toast")) {
 		ev_toast(rest_of_line(line, 1));
 		ok(cl);

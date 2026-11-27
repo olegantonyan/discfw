@@ -11,6 +11,7 @@ static void usage(void)
 	fputs("usage: discfw get KEY | set KEY VALUE | reset KEY | list [PREFIX] | state | watch | cfg KEY\n"
 	      "              screen on|off|lock|unlock|toggle | key KEY [short|double|long] | action NAME\n"
 	      "              vol PCT|+N|-N | sleep MIN | toast TEXT | poweroff | reboot | library reset\n"
+	      "              mode player|storage|usbdac (restarts into that mode)\n"
 	      "       discfw ui state | dump [top] | tap X Y | hold X Y [MS] | swipe X1 Y1 X2 Y2 [MS] | back | home |\n"
 	      "              goto SCREEN | folder PATH | shot PATH\n"
 	      "  cfg reads the settings file directly (no daemon needed); ui talks to discui's debug socket\n",

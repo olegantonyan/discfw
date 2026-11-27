@@ -7,10 +7,11 @@
 ::sysinit:/etc/init.d/rcS
 
 ttyS3::respawn:/sbin/getty -n -l /bin/sh -L ttyS3 115200 vt100
-ttyGS0::respawn:/sbin/getty -n -l /bin/sh -L ttyGS0 115200 vt100
+::respawn:/usr/libexec/discfw/usb-getty
 ::respawn:/usr/sbin/discd
 ::respawn:/usr/sbin/discsys
 ::respawn:/usr/libexec/discfw/mpd-run
+::respawn:/usr/libexec/discfw/uac-run
 ::respawn:/usr/bin/discui
 ::respawn:/usr/bin/discbt
 ::respawn:/usr/libexec/discfw/guard

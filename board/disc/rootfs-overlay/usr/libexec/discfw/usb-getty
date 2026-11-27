@@ -1,0 +1,5 @@
+#!/bin/sh
+# Shell on the USB serial port. The USB DAC gadget has no serial port: sleep instead of respawning in a loop.
+[ "$(cat /run/discfw.mode 2>/dev/null)" = usbdac ] && exec sleep 2147483647
+for i in $(seq 1 50); do [ -e /dev/ttyGS0 ] && break; sleep 0.1; done
+exec /sbin/getty -n -l /bin/sh -L ttyGS0 115200 vt100

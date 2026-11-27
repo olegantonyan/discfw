@@ -7,7 +7,7 @@ O=$TOP/output/host-discfw
 LV_VER=9.6.0
 J=-j$(nproc)
 mkdir -p "$O"
-rsync -a --delete --exclude compile_flags.txt --filter='P discd/discd' --filter='P discd/discctl' --filter='P discsys/discsys' --filter='P discsys/discfw' --filter='P discui/discui' "$TOP/src/" "$O/src/"
+rsync -a --delete --exclude compile_flags.txt --filter='P discd/discd' --filter='P discd/discctl' --filter='P discd/discuac' --filter='P discsys/discsys' --filter='P discsys/discfw' --filter='P discui/discui' "$TOP/src/" "$O/src/"
 EXTRA="EXTRA_CFLAGS=-I$O/src/common/include -g -O0 -fsanitize=address,undefined"
 LDX="EXTRA_LDFLAGS=-L$O/src/common -fsanitize=address,undefined"
 make -s -C "$O/src/common" $J CFLAGS="-g -O1" all test
@@ -37,7 +37,7 @@ test) ;;
 discsys) make -s -B -C "$O/src/discsys" $J "$EXTRA" "$LDX" ;;
 discui) discui ;;
 all)
-	make -s -B -C "$O/src/discd" $J "$EXTRA" "$LDX" discd discctl
+	make -s -B -C "$O/src/discd" $J "$EXTRA" "$LDX" discd discctl discuac
 	make -s -B -C "$O/src/discsys" $J "$EXTRA" "$LDX"
 	discui
 	;;

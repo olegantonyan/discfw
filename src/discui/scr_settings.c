@@ -30,7 +30,7 @@ static const struct page_def pages[] = {
 enum kind { R_SET, R_ACTION, R_INFO, R_PAGE };
 
 enum action {
-	A_SCAN, A_RESCAN, A_LIB_RESET, A_REBOOT, A_POWEROFF, A_RESTART_UI, A_RESET_UI, A_RESET_SETTINGS, A_ZONE, A_PROFILE,
+	A_SCAN, A_RESCAN, A_LIB_RESET, A_STORAGE, A_USBDAC, A_REBOOT, A_POWEROFF, A_RESTART_UI, A_RESET_UI, A_RESET_SETTINGS, A_ZONE, A_PROFILE,
 	A_SLEEP, A_WIFI, A_BT
 };
 
@@ -233,6 +233,8 @@ static void system_rows(struct spage *p)
 	add_action(p, A_RESTART_UI, "Restart interface", NULL);
 	add_action(p, A_RESET_UI, "Forget folder positions…", NULL);
 	add_action(p, A_RESET_SETTINGS, "Reset all settings…", NULL);
+	add_action(p, A_STORAGE, "USB storage…", NULL);
+	add_action(p, A_USBDAC, "USB DAC…", NULL);
 	add_action(p, A_REBOOT, "Reboot", NULL);
 	add_action(p, A_POWEROFF, "Power off", NULL);
 }
@@ -465,6 +467,12 @@ static void click(void *ctx, int idx)
 		break;
 	case A_LIB_RESET:
 		ui_confirm("Delete the library database and scan again?", "Reset", lib_reset, NULL);
+		break;
+	case A_STORAGE:
+		ui_confirm("Restart as USB storage? The computer gets the music card; the player can't play until you leave.", "Restart", do_power, "mode storage");
+		break;
+	case A_USBDAC:
+		ui_confirm("Restart as USB DAC? Leave from its screen; the USB shell is off in this mode.", "Restart", do_power, "mode usbdac");
 		break;
 	case A_REBOOT:
 		ui_confirm("Reboot now?", "Reboot", do_power, "reboot");

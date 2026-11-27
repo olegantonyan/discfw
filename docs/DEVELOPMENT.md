@@ -48,17 +48,19 @@ Patches to packages:
 | libc | uClibc-ng 1.0.57, **32-bit `time_t`** | Kernel 4.4 lacks the 64-bit-time ALSA and input ABI. musl is always 64-bit time; glibc with NaN2008 needs headers ≥ 4.5. |
 | Kernel headers | 4.4.302 | match the running kernel |
 | Init | BusyBox init + mdev. `/linuxrc` runs `/sbin/init`, or, when a one-time test boot is armed, loop-mounts `/usr/data/discfw/boot/rootfs.sqfs` and switches into it | The stock boot loader passes `init=/linuxrc`. A RAM copy of the whole root file system was tried and dropped: without swap its 17 MB (14.5 % of RAM) stay pinned. Any failure before the switch boots the NAND image. |
-| Supervision | inittab `respawn` for `discd`, `discsys`, `mpd-run`, `discui`, `discbt`, `guard`. discsys pings the UI every 5 s and kills it after 3 missed answers. Two UI crashes in 10 s → safe mode. | A crashed daemon restarts alone and rebuilds its state from MPD, discd and sysfs. There is no "kill everything" supervisor like stock's. |
+| Supervision | inittab `respawn` for `discd`, `discsys`, `mpd-run`, `uac-run`, `discui`, `discbt`, `guard`. discsys pings the UI every 5 s and kills it after 3 missed answers. Two UI crashes in 10 s → safe mode. | A crashed daemon restarts alone and rebuilds its state from MPD, discd and sysfs. There is no "kill everything" supervisor like stock's. |
 | System policy | `discsys` (GLib): buttons, screen power (backlight, `bl_power`, panel and touch sleep), power profiles, low battery, settings, volume, library scan policy, Wi-Fi, Bluetooth. Line protocol on `/run/discsys.sock`, command `discfw`. | Buttons, volume, power-off and screen timeouts keep working while the UI is dead or restarting. |
 | Audio | MPD → ALSA `disc` (a `hooks` PCM over `hw:0,3`) → `libdisc_hook.so` → `discd` | The hook sets the DAC rate and unmutes on `hw_params`, and sends `release` on `hw_free`/close. So any ALSA client gets the right DAC state, and reopening at the same rate never touches the DAC. MPD: `format "*:32:2"`, DAC rates in `allowed_formats` (others resample to 44.1 kHz), `period_time 40000`. |
 | DAC | `discd` keeps `/dev/cs43131` and `/dev/cs43131c` open, initialises once | Opening runs the full init. Rate change = rate on A, then on C. |
+| USB DAC bridge | `discuac`: a capture thread reads the gadget into a 1 s ring; the main thread opens `disc` (or `disc_spdif24`/`176`/`192`) at the measured rate and drops or repeats single frames to hold 30 ms of buffer | Opening the DAC at a new rate takes about 200 ms, longer than the gadget's capture buffer lasts at 384 kHz. Measured: 3 % CPU at 384 kHz; the test PC ran 244 ppm fast at both 44.1 and 48 kHz. |
 | Shutdown | `S95audio stop` pauses MPD (position kept), stops it, then powers the DAC down | no pop at power-off |
 | Charge limit | `discd` every 5 s: gauge sysfs + charger `REG08`, writes only `REG01` bit 4 and the `REG02` current bits over `/dev/i2c-2` | The stock ioctls also force a 2.4 A input limit on any source. Unplugged → charging on, so a dead `discd` never blocks charging. |
 | Radios | `S35radio`: `bcmdhd` with stock parameters at every boot. Wi-Fi = wpa_supplicant + udhcpc; Bluetooth = `brcm_patchram_plus` on `ttyS0` + bluetoothd + bluez-alsa (A2DP source; HFP-AG with `bt.battery`, for the headphone battery) | `bcmdhd` also owns the Bluetooth power line and needs a 1 MB contiguous buffer, so it loads early and stays loaded. The chip stays off until used. |
 | Modules | stock `utils soc_utils soc_gpio soc_msc soc_adc` with stock parameters | SD card, SDIO, GPIO, ADC |
 | UI | `discui`, LVGL 9.6 (static), own fbdev flush with 180° rotation, own touch reader and gesture layer, a `poll()` loop that sleeps while the screen is off, recycled list rows, cover art in a worker thread (libjpeg-turbo DCT scaling, libpng). DejaVu Sans through tiny_ttf for accented names. | The panel is mounted upside down. |
 | Formats | MPD: FLAC, MP3 (mpg123), Ogg/Opus, WAV/AIFF (libsndfile), and ffmpeg with only the AAC, ALAC, APE, WavPack, WMA and TTA decoders | the stock formats without a full ffmpeg |
-| USB | configfs gadget, ACM only | root shell for development |
+| USB | configfs gadget per boot mode (`S14usbgadget`, mode from `/run/discfw.mode`): Player = ACM; USB storage = ACM + `mass_storage` on `/dev/mmcblk0`; USB DAC = `uac2` alone, bridged to the DAC by `discuac` | FiiO's kernel drops every other function from a config with `uac2`, and unbinding it mid-stream is unsafe, so each gadget is built once per boot. Modes switch by restarting: `mode.next` is read once by `S13data`. |
+| S/PDIF | `audio.spdif`: MPD plays to `hw:0,4` (DMA4 → `LO2_MUX`), 24-bit, ≤192 kHz; discd keeps the DAC powered down | as stock; the 3.5 mm jack carries the S/PDIF line while the DAC amps are off |
 | Reboot | `/sbin/reboot` wrapper → `discreset` (watchdog reset) | the kernel's restart path hangs |
 
 ## Test without flashing
@@ -71,6 +73,7 @@ All of these need the player running discfw and connected over USB.
 - **Boot an image once:** `make && scripts/disc-tryboot`. It stores `rootfs.squashfs` in `/usr/data/discfw/boot`, arms a one-time flag and reboots. `/linuxrc` loop-mounts it; the next boot uses the NAND image again.
 - **Check the flash:** `scripts/disc-verify` reads `mtd2` back and compares every 128 KiB block with the image. `NODROP=1` checks what is already in the page cache.
 - **Screenshot:** `scripts/disc-shot FILE.png`.
+- **USB modes:** they restart the player, so test them from a trial boot and re-arm it before each switch: `touch /usr/data/discfw/boot/try`, then `discfw mode storage|usbdac|player`. USB DAC mode has no serial shell; use SSH.
 
 ## Host build
 
@@ -102,8 +105,6 @@ Installed in `/usr/libexec/discfw-test/` (source in `scripts/device/`). Run them
 | `hwprobe.sh` | read-only hardware overview |
 | `msctest.sh` | USB mass storage next to the serial port, from a RAM disk; run it detached, it reverts by itself |
 
-`scripts/device/unsafe/uactest.sh` is not installed: it takes the stock kernel's USB gadget down until a power cycle.
-
 ## Measurements
 
 From 2026-11-25, before the current UI and discsys. They need to be measured again.
@@ -120,8 +121,7 @@ From 2026-11-25, before the current UI and discsys. They need to be measured aga
 
 ## Roadmap
 
-- **USB mass storage:** configfs `mass_storage` with `lun.0/file=/dev/mmcblk0` after unmounting the card (`msctest.sh` works).
-- **USB DAC mode:** configfs `uac2` (FiiO's kernel has the multi-rate backport) and a capture → `disc` forwarder. It must be its own gadget, switched with care; find out first why removing the ACM + UAC2 gadget breaks USB.
+- **USB DAC:** native DSD (the gadget's alt setting 2) and DoP.
 - **Headphone buttons (AVRCP):** need `uinput`, which the stock kernel lacks.
 - **Jack status** from the ADC; equalizer; the settings that do nothing yet ([USAGE.md](USAGE.md#settings)).
 - **Power:** radios off when not used, DAC low power when idle (`audio.dac_idle_off`, experimental), measure the battery current.

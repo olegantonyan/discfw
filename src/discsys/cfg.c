@@ -39,6 +39,7 @@ static gboolean discd_reload(gpointer data)
 {
 	(void)data;
 	reload_src = 0;
+	cfg_flush();
 	hw_request("reload", NULL, 0);
 	return G_SOURCE_REMOVE;
 }
@@ -122,6 +123,10 @@ static void apply(const char *key)
 		tz_apply();
 	else if (!strcmp(key, "wifi.enabled") || !strcmp(key, "bt.enabled") || prefix(key, "net.") || !strcmp(key, "bt.battery"))
 		spawn_apply(key);
+	else if (!strcmp(key, "audio.spdif")) {
+		spawn_apply(key);
+		ev_toast(set_get_bool(key) ? "S/PDIF on: the 3.5 mm jack is digital, fixed level" : "S/PDIF off");
+	}
 }
 
 int cfg_set(const char *key, const char *val)

@@ -6,7 +6,7 @@ How to use the player with discfw: the UI, buttons, settings, network, Bluetooth
 
 - **Screens:** Home, Folders, Now playing, Queue, Playlists, Library (artists, albums, genres), Settings.
 - **Back:** swipe right from the left edge, on every screen except the lock screen, also out of menus and dialogs. A bulge shows how far you are.
-- **Shade:** pull down from the top edge: player controls, Wi-Fi and Bluetooth toggles, volume, brightness, shortcuts. Hold the Wi-Fi or Bluetooth toggle to open its settings.
+- **Shade:** pull down from the top edge: the current song (tap it for Now playing), player controls, Wi-Fi and Bluetooth toggles, volume, brightness, Settings. Hold the Wi-Fi or Bluetooth toggle to open its settings.
 - **Lock screen:** comes on when the screen wakes (`lock.*` settings). Swipe up to unlock.
 - **Folders:** a letter strip for fast scrolling. Each folder remembers its position. Hold a row for its menu: play, shuffle, add to queue, create playlist, add to playlist. Folders that are not in the library yet play at once and are scanned in the background.
 - **Long names** scroll by themselves (`ui.marquee`: all, only the playing item, off). Hold a row and drag sideways to scroll its name by hand.
@@ -42,11 +42,11 @@ discfw reset KEY
 discfw cfg KEY            # read the file directly, without the daemon
 ```
 
-These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folders`, `audio.pause_bt_loss`, `audio.pause_jack_out`, `lib.scan_after_usb`, `lib.playlist_sort`, `bt.autoreconnect`, `sys.mode`, `power.<profile>.wifi_idle_min`, `power.<profile>.bt_idle_min`.
+These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folders`, `audio.pause_bt_loss`, `audio.pause_jack_out`, `lib.playlist_sort`, `bt.autoreconnect`, `power.<profile>.wifi_idle_min`, `power.<profile>.bt_idle_min`.
 
 ## Music and library
 
-- Put music on a microSD card (exFAT or FAT32). The card is mounted read-only at `/media/sd`.
+- Put music on a microSD card (exFAT or FAT32), with a card reader or in [USB storage mode](#usb-storage-and-usb-dac). The card is mounted read-only at `/media/sd`.
 - Formats: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC, ALAC, APE, WavPack, WMA, TTA. PCM from 32 kHz to 384 kHz. Other rates are resampled to 44.1 kHz.
 - The library is MPD's database in `/usr/data/discfw/mpd/`. When it is scanned depends on `lib.scan`: when the card changes (default), on every mount, or only by hand. Scans run at low priority and never while the card is out. On the player: `discfw library scan` (new and changed files), `discfw library rescan` (everything), `discfw library reset` (delete the database).
 - Playback state (queue, position, current folder) survives power-off.
@@ -81,6 +81,15 @@ These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folde
 - On the player: `discfw bt list | scan [SECS] | pair|connect|disconnect|forget MAC`.
 - Headphone buttons (AVRCP) do not control playback yet.
 
+## USB storage and USB DAC
+
+Besides Player, the player has two USB modes. It restarts into a mode, and any restart or power-off returns to Player.
+
+- **Enter:** Settings → System → USB storage… or USB DAC…, or `discfw mode storage|usbdac` on the player.
+- **USB storage:** the computer sees the whole microSD card as a removable drive, read-write, next to the serial shell. Nothing plays meanwhile. The player returns to Player when the computer ejects the drive, when the cable is unplugged, or with "Back to player" (eject on the computer first). Then it scans the library (`lib.scan_after_usb`, on by default).
+- **USB DAC:** a USB Audio Class 2 sound card "discfw USB DAC": stereo, 32-bit, 32–384 kHz. The player measures the rate from the incoming audio. The volume keys and the slider on its screen set the DAC volume; the computer's volume scales the signal. Output goes to the DAC, or to S/PDIF with `audio.spdif` (352.8 and 384 kHz are halved for S/PDIF). Clock drift between the computer and the player is absorbed by dropping or repeating single samples, at most 500 ppm. There is no USB serial shell in this mode (the kernel allows UAC2 only as the sole USB function), so use SSH. Leave with "Back to player". No DSD.
+- While USB power is present, these modes never power off when idle.
+
 ## Battery and power
 
 - The battery indicator is at the top of the screen. More details: Settings → Battery.
@@ -103,6 +112,8 @@ discctl status | rate HZ | mute | unmute | release | vol 0..255|+|- | volpct 0..
 
 ALSA test: `aplay -D disc FILE.wav`, `speaker-test -D disc -c 2 -r 44100 -F S32_LE`.
 
+**S/PDIF:** `audio.spdif` sends coaxial S/PDIF out of the 3.5 mm jack instead of analog audio; connect it to an external DAC with a 3.5 mm to RCA coax cable. The internal DAC is powered down meanwhile, so the 4.4 mm jack is silent too. Unplug headphones first. Output is 24-bit, 44.1–192 kHz (MPD resamples higher rates), at a fixed level: volume does not change it. Changing the setting restarts MPD.
+
 ## Other commands on the player
 
 ```
@@ -112,6 +123,7 @@ discfw key KEY [short|double|long]      # act as if a button was pressed
 discfw vol PCT|+N|-N
 discfw toast TEXT
 discfw poweroff | reboot
+discfw mode player|storage|usbdac       # restart into a mode
 discfw ui state | dump [top] | tap X Y | hold X Y [MS] | swipe X1 Y1 X2 Y2 [MS] | back | home | goto SCREEN | folder PATH | shot PATH
 ```
 
@@ -119,4 +131,4 @@ discfw ui state | dump [top] | tap X Y | hold X Y [MS] | swipe X1 Y1 X2 Y2 [MS] 
 
 - **Time zone:** `time.zone` (list in `/usr/share/discfw/zones.tsv`). The clock shows `?` until NTP has set the time after boot.
 - **Logs:** `logread` (a 256 KB ring in RAM).
-- **State on the data partition** (`/usr/data/discfw/`, UBIFS, mounted `sync`; FiiO's files there stay untouched): `settings`, `wifi/`, `bluetooth/` (pairings), `bluealsa/`, `ssh/` (host keys, `root/authorized_keys`), `mpd/` (database, state, playlists), `hostname`, `clock`, `TZ`, `boot/` (one-time test boot, see [DEVELOPMENT.md](DEVELOPMENT.md#test-without-flashing)). If the partition does not mount, a RAM disk is used instead and nothing is formatted.
+- **State on the data partition** (`/usr/data/discfw/`, UBIFS, mounted `sync`; FiiO's files there stay untouched): `settings`, `wifi/`, `bluetooth/` (pairings), `bluealsa/`, `ssh/` (host keys, `root/authorized_keys`), `mpd/` (database, state, playlists), `hostname`, `clock`, `TZ`, `mode.next` (the mode for the next boot, used once), `boot/` (one-time test boot, see [DEVELOPMENT.md](DEVELOPMENT.md#test-without-flashing)). If the partition does not mount, a RAM disk is used instead and nothing is formatted.

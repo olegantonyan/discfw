@@ -192,8 +192,13 @@ void nav_start(void)
 	lv_obj_align(status, LV_ALIGN_TOP_MID, 0, STATUS_Y);
 	lv_obj_set_clickable(status, false);
 	app_listen(status, EV_BAT | EV_SECOND | EV_SYS | EV_SETTINGS | EV_VOLUME, status_update, NULL);
-	shade_init();
 	lock_init();
+	if (strcmp(disc_boot_mode(), "player")) {
+		nav_push(&scr_mode, NULL);
+		status_update(0, NULL);
+		return;
+	}
+	shade_init();
 	if (app.safe_mode)
 		target = &scr_folders;
 	else if (!strcmp(start, "last"))

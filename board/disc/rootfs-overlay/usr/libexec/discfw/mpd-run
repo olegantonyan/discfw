@@ -1,12 +1,14 @@
 #!/bin/sh
-# Writes /run/mpd.conf from discfw settings and runs MPD in the foreground (inittab respawns it). Waits while
-# /run/mpd.hold exists (USB storage, library reset); moves a database aside that crashed MPD 3 times in a minute.
+# Writes /run/mpd.conf from discfw settings and runs MPD in the foreground (inittab respawns it). Sleeps in the USB
+# storage and USB DAC modes, waits while /run/mpd.hold exists (library reset); moves a database aside that crashed MPD
+# 3 times in a minute.
 S=/usr/data/discfw
 DB=$S/mpd/database
 H=/run/mpd.hold
 C=/run/mpd.conf
 L=/run/mpd.crashes
 
+case "$(cat /run/discfw.mode 2>/dev/null)" in storage | usbdac) exec sleep 2147483647 ;; esac
 while [ -e $H ]; do sleep 1; done
 now=$(cut -d. -f1 /proc/uptime)
 recent=$(awk -v n="$now" 'n - $1 < 60' $L 2>/dev/null | wc -l)
@@ -50,13 +52,19 @@ CONF
 		echo "password \"$pw@read,add,control,admin\""
 		echo 'default_permissions ""'
 	fi
+	if [ "$(cfg audio.spdif)" = 1 ]; then
+		dev=disc_spdif fmt="*:24:2" rates="44100 48000 88200 96000 176400 192000" bits=24
+	else
+		dev=disc fmt="*:32:2" rates="44100 32000 48000 88200 96000 176400 192000 352800 384000" bits=32
+	fi
+	allowed=$(for r in $rates; do printf '%s ' "$r:$bits:2"; done)
 	cat <<CONF
 audio_output {
 	type "alsa"
 	name "DAC"
-	device "disc"
-	format "*:32:2"
-	allowed_formats "44100:32:2 32000:32:2 48000:32:2 88200:32:2 96000:32:2 176400:32:2 192000:32:2 352800:32:2 384000:32:2"
+	device "$dev"
+	format "$fmt"
+	allowed_formats "${allowed% }"
 	mixer_type "null"
 	period_time "40000"
 }

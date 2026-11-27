@@ -1,6 +1,7 @@
 #!/bin/sh
 M=/media/sd
 [ "$1" = start ] || { [ "$1" = stop ] && umount $M; exit 0; }
+[ "$(cat /run/discfw.mode 2>/dev/null)" = storage ] && exit 0
 for i in $(seq 1 50); do
 	for d in /dev/mmcblk0p1 /dev/mmcblk0; do
 		[ -b $d ] && mount -o ro,iocharset=utf8 $d $M 2>/dev/null && exit 0

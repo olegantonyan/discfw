@@ -35,7 +35,7 @@ static int vol = VOL_DEFAULT, volpct = -1, balance;
 static int muted = -1;
 static int filter_applied = -1, dre_applied = -1;
 static long long release_at, off_at;
-static bool powered_down;
+static bool powered_down, spdif;
 
 static struct client {
 	struct lconn c;
@@ -197,6 +197,14 @@ static void dac_status(struct kvbuf *b)
 	kv_int(b, "muted", muted);
 	kv_int(b, "balance", balance);
 	kv_int(b, "off", powered_down);
+	kv_int(b, "spdif", spdif);
+}
+
+static void apply_spdif(void)
+{
+	spdif = set_get_bool("audio.spdif");
+	if (spdif && !powered_down && !dac_off())
+		syslog(LOG_INFO, "S/PDIF output: DAC powered down");
 }
 
 #define PCM_PROC "/proc/asound/card0/pcm3p/sub0/"
@@ -268,6 +276,7 @@ static void reload(void)
 {
 	settings_load(SETTINGS_PATH);
 	power_reload();
+	apply_spdif();
 	balance = set_get_int("audio.balance");
 	if (volpct >= 0)
 		vol = pct_to_reg(volpct);
@@ -311,7 +320,7 @@ static void handle(struct client *cl, char *line)
 		r = 0;
 	} else if (!strcmp(cmd, "rate")) {
 		release_at = off_at = 0;
-		r = dac_rate(strtoul(arg, NULL, 10));
+		r = spdif ? -1 : dac_rate(strtoul(arg, NULL, 10));
 		dac_changed = true;
 	} else if (!strcmp(cmd, "mute")) {
 		release_at = 0;
@@ -319,7 +328,7 @@ static void handle(struct client *cl, char *line)
 		dac_changed = true;
 	} else if (!strcmp(cmd, "unmute")) {
 		release_at = off_at = 0;
-		r = rate_code < 0 ? -1 : dac_mute(0);
+		r = spdif || rate_code < 0 ? -1 : dac_mute(0);
 		dac_changed = true;
 	} else if (!strcmp(cmd, "vol")) {
 		volpct = -1;
@@ -473,6 +482,7 @@ int main(void)
 	dac_volume(vol);
 	dac_filter_dre();
 	resume_running_stream();
+	apply_spdif();
 	power_init();
 	lfd = unix_listen(DISCD_SOCK, 0666);
 	if (lfd < 0) {

@@ -5,6 +5,7 @@ disc-sh 'cmd' ['cmd' ...]      run each command, print output and exit code
 disc-sh --push LOCAL REMOTE    copy a file (raw bytes over the console, sha256-checked)
 disc-sh --probe                print whatever the console shows
 """
+import glob
 import hashlib
 import os
 import select
@@ -13,7 +14,7 @@ import termios
 import time
 import tty
 
-PORT = os.environ.get("DISC_TTY", "/dev/serial/by-id/usb-discfw_discfw_Serial_discfw-if00")
+PORT = os.environ.get("DISC_TTY") or (glob.glob("/dev/serial/by-id/usb-discfw_*-if00") or ["/dev/serial/by-id/usb-discfw_discfw_Serial_discfw-if00"])[0]
 
 
 def open_port():

@@ -51,6 +51,7 @@ int main(int argc, char **argv)
 	sys.loop = g_main_loop_new(NULL, FALSE);
 	state_init();
 	cfg_init();
+	mode_init();
 	server_init();
 	hw_init();
 	screen_init();

@@ -69,6 +69,7 @@ const struct set_def set_defs[] = {
 	  "nos=Non-oversampling|wideband=Wideband flat",
 	  "audio", "DAC filter"),
 	B("audio.dre", "0", "audio", "Dynamic range enhancement"),
+	B("audio.spdif", "0", "audio", "S/PDIF output (3.5 mm)"),
 	B("audio.pause_bt_loss", "1", "audio", "Pause when Bluetooth disconnects"),
 	B("audio.pause_jack_out", "1", "audio", "Pause when headphones unplugged"),
 	I("audio.dac_idle_off", "0", 0, 600, 10, "audio", "DAC power-down when idle (experimental)", "s"),
@@ -119,8 +120,6 @@ const struct set_def set_defs[] = {
 	B("bt.enabled", "0", "bluetooth", "Bluetooth"),
 	B("bt.autoreconnect", "1", "bluetooth", "Reconnect automatically"),
 	B("bt.battery", "1", "bluetooth", "Headphone battery"),
-
-	E("sys.mode", "player", "player=Player|usbdac=USB DAC", "", "Boot mode"),
 };
 
 const int set_ndefs = sizeof(set_defs) / sizeof(set_defs[0]);

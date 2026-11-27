@@ -1,0 +1,4 @@
+#!/bin/sh
+# USB DAC bridge, only in the USB DAC boot mode.
+[ "$(cat /run/discfw.mode 2>/dev/null)" = usbdac ] || exec sleep 2147483647
+exec /usr/bin/discuac

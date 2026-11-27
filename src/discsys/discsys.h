@@ -7,6 +7,7 @@
 enum play_state { PS_UNKNOWN, PS_STOP, PS_PLAY, PS_PAUSE };
 enum screen_state { SCR_ON, SCR_DIM, SCR_OFF };
 enum output { OUT_DAC, OUT_BT };
+enum boot_mode { MODE_PLAYER, MODE_STORAGE, MODE_USBDAC };
 
 struct bat {
 	bool valid;
@@ -17,6 +18,8 @@ struct bat {
 struct sys {
 	GMainLoop *loop;
 	bool fake_hw;
+	enum boot_mode mode;
+	int uac_rate;
 	struct bat bat;
 	bool powered;
 	enum screen_state screen;
@@ -77,6 +80,14 @@ void wifi_psk(const char *pass, const char *ssid, char out[65]);
 int hw_request(const char *cmd, char *reply, size_t len);
 void hw_volpct(int pct);
 
+void mode_init(void);
+const char *mode_name(void);
+bool mode_usb(void);
+void mode_on_bat(void);
+int mode_request(const char *name, char *err, size_t errlen);
+void mode_uac(int rate);
+
+void volume_init(void);
 void volume_on_mpd_connect(void);
 void volume_reapply(void);
 void volume_on_mixer(int pct);

@@ -91,7 +91,7 @@ const lv_image_dsc_t *vinyl_disc(void);
 const lv_image_dsc_t *vinyl_label(void);
 
 extern const struct screen_ops scr_home, scr_folders, scr_np, scr_queue, scr_playlists, scr_playlist, scr_library,
-	scr_settings, scr_settings_page, scr_wifi, scr_bt;
+	scr_settings, scr_settings_page, scr_wifi, scr_bt, scr_mode;
 
 void folders_open_at(const char *path, const char *select_name);
 void settings_open_page(const char *page);

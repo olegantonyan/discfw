@@ -124,6 +124,8 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		app.sys.out_bt = !strcmp(v, "bt");
 		kv_get(line, "btdev", app.sys.bt_dev, sizeof(app.sys.bt_dev));
 		parse_bt(line, "btname", "btbat");
+		app.sys.usb = kv_get_int(line, "usb", 0);
+		app.sys.uac_rate = kv_get_int(line, "uacrate", 0);
 		app.sys.sleep_left = kv_get_int(line, "sleep", 0);
 		parse_power(line);
 	} else if (!strcmp(tag, "!screen")) {
@@ -137,6 +139,12 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		parse_bat(line);
 	} else if (!strcmp(tag, "!bt")) {
 		parse_bt(line, "name", "battery");
+		app_notify(EV_SYS);
+	} else if (!strcmp(tag, "!mode")) {
+		app.sys.usb = kv_get_int(line, "usb", 0);
+		app_notify(EV_SYS);
+	} else if (!strcmp(tag, "!uac")) {
+		app.sys.uac_rate = kv_get_int(line, "rate", 0);
 		app_notify(EV_SYS);
 	} else if (!strcmp(tag, "!power")) {
 		parse_power(line);

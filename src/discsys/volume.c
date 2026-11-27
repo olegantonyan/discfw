@@ -54,6 +54,11 @@ static void push_to_mpd(void)
 		mpdc_report("setvol");
 }
 
+void volume_init(void)
+{
+	sys.volume = stored();
+}
+
 void volume_reapply(void)
 {
 	apply_hw();

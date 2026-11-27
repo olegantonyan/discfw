@@ -48,6 +48,7 @@ static void parse_bat(const char *line)
 	b.valid = b.cap >= 0 && strcmp(b.state, "unknown");
 	sys.bat = b;
 	power_on_bat();
+	mode_on_bat();
 }
 
 static void on_line(struct lconn *c, char *line, void *arg)

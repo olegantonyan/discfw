@@ -69,19 +69,33 @@ bool library_update(const char *reason)
 	return true;
 }
 
+static bool used_over_usb(void)
+{
+	const char *marker = disc_data_path("usb-storage.used");
+
+	if (access(marker, F_OK))
+		return false;
+	remove(marker);
+	return set_get_bool("lib.scan_after_usb");
+}
+
 static void check(const char *reason)
 {
 	const char *policy = set_get("lib.scan");
 	char cid[96];
+	bool usb;
 	int h;
 
-	if (!mounted || !mpd_seen || !strcmp(policy, "manual"))
+	if (!mounted || !mpd_seen)
+		return;
+	usb = used_over_usb();
+	if (!usb && !strcmp(policy, "manual"))
 		return;
 	card_id(cid, sizeof(cid));
 	h = cid[0] ? (int)cid_hash(cid) : 0;
-	if (!strcmp(policy, "card") && h && state_get_int("card.cid", -1) == h)
+	if (!usb && !strcmp(policy, "card") && h && state_get_int("card.cid", -1) == h)
 		return;
-	if (library_update(reason))
+	if (library_update(usb ? "after USB storage" : reason))
 		state_set_int("card.cid", h);
 }
 

@@ -119,6 +119,8 @@ static gboolean idle_check(gpointer data)
 	(void)data;
 	if (mins <= 0 || sys.play == PS_PLAY || sys.screen != SCR_OFF || sys.shutting_down || !idle_since)
 		return G_SOURCE_CONTINUE;
+	if (sys.mode != MODE_PLAYER && mode_usb())
+		return G_SOURCE_CONTINUE;
 	if (now_ms() - since >= mins * 60000LL) {
 		logmsg(LOG_INFO, "idle for %d min, powering off", mins);
 		power_off(false);

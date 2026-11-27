@@ -75,6 +75,15 @@ Rules (`discd` follows them):
 - **Stale DMA pointer** (`sound/soc/ingenic/as-v2/as-dma.c`): `.pointer` returns a position that the period interrupt updates and only `open()` resets (no `.prepare`). After stop → prepare → start on the same open PCM, the first position read is the old one. If it equals the start threshold, the stream underruns 60 µs after every start, forever. Otherwise the first ~0.5 s are misplaced. **Rule: never restart a stopped PCM on the same handle; close and open it again** (≈ 1.5 ms). MPD patch `0002-alsa-reopen-instead-of-prepare-after-stop` does this after a skip or seek and in underrun recovery.
 - **Buffer size steps:** the driver accepts only some buffer sizes, so `snd_pcm_hw_params_set_buffer_time_near()` fails at 44.1 kHz when it is called before the period is set. MPD patch `0001` sets the period first (as `aplay` does).
 - The ALSA mixer shows only the SoC's internal codec and the routes; DAC controls exist only as the ioctls above.
+- **S/PDIF out:** `hw:0,4` (AS-DMA channel 4) with `LO2_MUX` = `LI12`; the signal leaves on PC14 through the 3.5 mm jack. The transmitter takes 16- to 24-bit samples only (`S32_LE` fails with `EINVAL`, and an ALSA `plug` picks S32 unless its slave format is set). It also accepts 352.8 and 384 kHz, which receivers do not support; stock plays 44.1–192 kHz. Stock switches to it with no GPIO change: it only powers the CS43131 down (amps off) and plays to the other PCM.
+
+## USB gadget: UAC2
+
+- FiiO's `configfs_composite_bind` removes every other function from a configuration that contains `uac2`. So a USB DAC gadget is `uac2` alone: no serial port beside it. Removing `uac2` from such a config leaves it empty, and binding it again fails ("needs at least one function").
+- `c_srate` takes one value. The rates the host sees are fixed in the kernel: 32, 44.1, 48, 88.2, 96, 176.4, 192, 352.8 and 384 kHz. Attributes can only be written before the function is linked into a config.
+- Capture only (host → player), isochronous adaptive endpoint without feedback, no feature unit (no host volume). ALSA card `FIIO_UAC2_Gadget`, `S32_LE`, 2 channels; the capture PCM allows only the current `c_srate`.
+- The kernel ignores the host's sample-rate request and guesses the rate from the size of the first packet, so a 44.1 kHz stream can be reported as 48 kHz. It then writes the guess to `c_srate` and sends a uevent on the misc device `usb_dac` (`UAC_STATE=START`, `UAC_SRATE`, `UAC_FORMAT=PCM|DSD`). Nothing is sent when the host stops a stream (alt setting 0). `discuac` therefore measures the rate from the incoming data.
+- Unbinding while a stream runs queues work inside memory that `rmdir` frees, so discfw never tears the gadget down; leaving USB DAC mode is a reboot.
 
 ## Charger: SGM41513
 
@@ -156,4 +165,3 @@ The kernel's own restart path (`reboot(2)`) leaves the board dark and hung. So `
 - **No IPv6:** nothing answers AAAA queries for the player's name. `mdnsd` is patched to answer with an NSEC record (RFC 6762 §6.1), which macOS, iOS and Windows respect. Avahi on Linux still waits 5 s for AAAA: use `ssh -4` or `AddressFamily inet`.
 - **Reverse DNS:** many routers never answer PTR queries for private addresses, so dropbear's reverse lookup cost about 45 s per login. dropbear is built with `BR2_PACKAGE_DROPBEAR_DISABLE_REVERSEDNS`.
 - **exFAT `stat` is slow on a cold cache:** about 35 ms per entry on a 1 TB card (a folder with 784 entries took 27 s, against 4 ms for `readdir` alone). **Rule: list folders with `readdir` and `d_type`, never `stat` each entry.** Some entries (`*.BMK`, names cut to 20 characters) come back from `readdir` but fail lookup with `ENOENT`; skip them.
-- **USB gadget teardown:** removing an ACM + UAC2 composite gadget after streaming took the stock kernel's USB gadget down until a power cycle. `scripts/device/unsafe/uactest.sh` reproduces it and is not installed.

@@ -1,7 +1,8 @@
 #!/bin/sh
-# mdev hook for the SD card: mount read-only on insert; on removal pause playback and drop the mount.
+# mdev hook for the SD card: mount read-only on insert; on removal pause playback and drop the mount. In USB storage
+# mode the computer owns the card.
 M=/media/sd
-[ -e /run/usb-storage ] && exit 0
+[ "$(cat /run/discfw.mode 2>/dev/null)" = storage ] && exit 0
 case "$ACTION" in
 add)
 	grep -q " $M " /proc/mounts && exit 0

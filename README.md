@@ -10,6 +10,7 @@ What you get today:
 - Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
 - A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
 - Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level.
+- USB storage mode (the PC gets the music card) and USB DAC mode (the player is the PC's sound card), S/PDIF output on the 3.5 mm jack.
 - Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
 - Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
 
@@ -25,7 +26,7 @@ What you get today:
 
 Works: everything in the list above. See [docs/USAGE.md](docs/USAGE.md) for details.
 
-Not yet: USB mass storage, USB DAC mode, headphone buttons (AVRCP), equalizer, IPv6. The music card is read-only on the player, so copy music with a card reader. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
+Not yet: headphone buttons (AVRCP), Bluetooth receiver mode, equalizer, IPv6. The music card is read-only on the player; copy music in USB storage mode or with a card reader. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
 
 ## Hardware
 
@@ -182,7 +183,7 @@ Both projects keep FiiO's kernel and touch only `mtd2`, so both can go back to s
 
 ## Documentation
 
-- [docs/USAGE.md](docs/USAGE.md): on the player: UI, buttons, settings, Wi-Fi, Bluetooth, SSH, MPD, battery, commands.
+- [docs/USAGE.md](docs/USAGE.md): on the player: UI, buttons, settings, Wi-Fi, Bluetooth, SSH, MPD, USB modes, battery, commands.
 - [docs/HARDWARE.md](docs/HARDWARE.md): chips, buses, pins, flash layout, boot chain, mask-ROM mode.
 - [docs/STOCK_KERNEL.md](docs/STOCK_KERNEL.md): how discfw talks to the stock kernel, known kernel bugs and workarounds, the blob list.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): source layout, design, testing without flashing, host build, device tests, roadmap.
