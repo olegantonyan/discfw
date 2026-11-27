@@ -1,7 +1,7 @@
 # discfw: open firmware for the FiiO Snowsky Disc
 
 > [!WARNING]
-> **Experimental.** discfw is a hobby project in early development. It can have bugs that stop playback, drain the battery or need a reflash. You can always go back to FiiO's stock firmware over USB (see [Back to stock](#back-to-stock)). Use it at your own risk. This project is not made, supported or endorsed by FiiO.
+> **Experimental.** discfw is in early development. You can always go back to FiiO's stock firmware over USB (see [Back to stock](#back-to-stock)). This project is not made, supported, endorsed or even tolerated by FiiO.
 
 discfw replaces the software of the [FiiO Snowsky Disc](https://www.fiio.com/) music player with an open system built from source with [Buildroot](https://buildroot.org/). It changes only one part of the player's flash memory: the root file system (`mtd2`). FiiO's boot loader, FiiO's Linux 4.4 kernel and the recovery system stay as they are.
 
@@ -9,7 +9,7 @@ What you get today:
 
 - Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
 - A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
-- Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level and buttons (play, pause, next, previous).
+- Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level and buttons.
 - USB storage mode and USB DAC mode, S/PDIF output on the 3.5 mm jack.
 - Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
 - Equalizer: AutoEQ presets from the card, a 10-band graphic EQ and a parametric editor, a preset per output and per Bluetooth headset.

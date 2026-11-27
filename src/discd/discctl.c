@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 	char cmd[128] = "", reply[512];
 
 	if (argc < 2) {
-		fprintf(stderr, "usage: discctl rate <hz> | mute | unmute | release | vol <0-255>|+|- | volpct <0-100> | off | status | battery | reload | watch\n");
+		fprintf(stderr, "usage: discctl rate <hz> | mute | unmute | release | vol <0-255>|+|- | volpct <0-100> | off | status | battery | charge full|limit | reload | watch\n");
 		return 2;
 	}
 	if (!strcmp(argv[1], "watch"))

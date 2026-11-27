@@ -7,7 +7,7 @@
 
 #define OPEN_PX 80
 
-static lv_obj_t *shade, *song, *title, *artist, *play_lbl, *wifi, *bt, *vol, *bright, *info;
+static lv_obj_t *shade, *song, *title, *artist, *play_lbl, *wifi, *bt, *chg, *vol, *bright, *info;
 static bool open_;
 
 static void style_toggle(lv_obj_t *b, bool on)
@@ -27,6 +27,8 @@ static void refresh(void)
 	lv_label_set_text(play_lbl, app.mpd.state == PS_PLAY ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
 	style_toggle(wifi, set_get_bool("wifi.enabled"));
 	style_toggle(bt, set_get_bool("bt.enabled"));
+	lv_obj_set_hidden(chg, !app.sys.powered || set_get_int("battery.limit") >= 100);
+	style_toggle(chg, app.bat.skip);
 	if (!lv_obj_has_state(vol, LV_STATE_PRESSED))
 		lv_slider_set_value(vol, app.sys.volume, LV_ANIM_OFF);
 	if (!lv_obj_has_state(bright, LV_STATE_PRESSED))
@@ -136,6 +138,9 @@ static void ctl(lv_event_t *e)
 	case 4:
 		sysc_set("bt.enabled", set_get_bool("bt.enabled") ? "0" : "1");
 		break;
+	case 5:
+		sysc_send("charge %s", app.bat.skip ? "limit" : "full");
+		break;
 	}
 }
 
@@ -238,6 +243,7 @@ void shade_init(void)
 	r = row(170, 220, 56);
 	wifi = small_button(r, LV_SYMBOL_WIFI, 56, ctl, (void *)3);
 	bt = small_button(r, LV_SYMBOL_BLUETOOTH, 56, ctl, (void *)4);
+	chg = small_button(r, LV_SYMBOL_CHARGE, 56, ctl, (void *)5);
 	for (int i = 0; i < 2; i++) {
 		lv_obj_add_event_cb(i ? bt : wifi, radio_hold, LV_EVENT_PRESSED, NULL);
 		lv_obj_add_event_cb(i ? bt : wifi, radio_hold, LV_EVENT_LONG_PRESSED, NULL);
@@ -249,6 +255,6 @@ void shade_init(void)
 	b = small_button(shade, LV_SYMBOL_SETTINGS, 48, go, (void *)&scr_settings);
 	lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 308);
 
-	app_listen(shade, EV_STATUS | EV_SONG | EV_VOLUME | EV_SETTINGS | EV_OPTIONS | EV_SYS, on_event, NULL);
+	app_listen(shade, EV_STATUS | EV_SONG | EV_VOLUME | EV_SETTINGS | EV_OPTIONS | EV_SYS | EV_BAT, on_event, NULL);
 	shade_close();
 }

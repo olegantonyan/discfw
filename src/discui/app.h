@@ -66,7 +66,7 @@ struct sysstate {
 };
 
 struct batstate {
-	bool valid;
+	bool valid, skip;
 	int cap, mv, ma, temp;
 	char state[16], vbus[16], stage[16];
 };
@@ -100,6 +100,8 @@ void loop_unwatch(int fd);
 void loop_wake(void);
 
 lv_display_t *disp_create(void);
+void disp_set_rotation(int deg);
+int disp_rotation(void);
 void disp_set_active(bool on);
 bool disp_active(void);
 int disp_shot(const char *path);

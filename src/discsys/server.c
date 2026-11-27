@@ -257,6 +257,11 @@ static void handle(struct client *cl, char *line)
 			ok(cl);
 		}
 		kv_free(&out);
+	} else if (!strcmp(cmd, "charge") && (!strcmp(a1, "full") || !strcmp(a1, "limit"))) {
+		if (power_charge_full(a1[0] == 'f'))
+			err(cl, "charger not available");
+		else
+			ok(cl);
 	} else if (!strcmp(cmd, "mode")) {
 		char e[96];
 		if (mode_request(a1, a2, e, sizeof(e)))

@@ -25,6 +25,7 @@
 
 const struct set_def set_defs[] = {
 	I("ui.brightness", "30", 1, 40, 1, "display", "Brightness", NULL),
+	E("ui.rotation", "0", "0=0°|90=90°|180=180°|270=270°", "display", "Screen rotation"),
 	E("ui.font", "medium", "small=Small|medium=Medium|large=Large", "display", "Font size"),
 	E("ui.accent", "teal", "teal=Teal|cyan=Cyan|blue=Blue|purple=Purple|pink=Pink|red=Red|orange=Orange|amber=Amber|green=Green",
 	  "display", "Accent color"),

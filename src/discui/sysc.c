@@ -92,6 +92,7 @@ static void parse_bat(const char *line)
 	app.bat.mv = kv_get_int(line, "mv", 0);
 	app.bat.ma = kv_get_int(line, "ma", 0);
 	app.bat.temp = kv_get_int(line, "temp", 0);
+	app.bat.skip = kv_get_int(line, "skip", 0);
 	kv_get(line, "state", app.bat.state, sizeof(app.bat.state));
 	kv_get(line, "vbus", app.bat.vbus, sizeof(app.bat.vbus));
 	kv_get(line, "stage", app.bat.stage, sizeof(app.bat.stage));
@@ -110,6 +111,7 @@ static void parse_power(const char *line)
 	app.sys.powered = kv_get_int(line, "powered", 0);
 	kv_get(line, "profile", app.sys.profile, sizeof(app.sys.profile));
 	app.sys.lowbat = kv_get_int(line, "lowbat", 0);
+	app.bat.skip = kv_get_int(line, "batskip", app.bat.skip);
 	if (kv_get_int(line, "cap", -1) >= 0 && !app.bat.valid) {
 		app.bat.valid = true;
 		app.bat.cap = kv_get_int(line, "cap", -1);
@@ -174,6 +176,8 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		set_put(key, v);
 		if (!strcmp(key, "ui.font") || !strcmp(key, "ui.accent"))
 			ui_restart();
+		else if (!strcmp(key, "ui.rotation"))
+			disp_set_rotation(set_get_int(key));
 		app_notify(EV_SETTINGS);
 	} else if (!strcmp(tag, "!eq")) {
 		app_notify(EV_EQ);

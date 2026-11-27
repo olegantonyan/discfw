@@ -1,7 +1,9 @@
 #include "app.h"
 
+#include <disc/settings.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,12 +18,35 @@ static struct {
 	size_t len;
 	uint32_t bpp, stride;
 	struct fb_var_screeninfo v;
-	bool rot180;
+	int mount, rot;
 } fb = { .fd = -1 };
 
 static uint32_t *shadow;
 static bool active = true;
 static lv_display_t *display;
+
+static void phys(int x, int y, int *px, int *py)
+{
+	int mx = fb.v.xres - 1, my = fb.v.yres - 1;
+
+	switch (fb.rot) {
+	case 90:
+		*px = mx - y;
+		*py = x;
+		break;
+	case 180:
+		*px = mx - x;
+		*py = my - y;
+		break;
+	case 270:
+		*px = y;
+		*py = my - x;
+		break;
+	default:
+		*px = x;
+		*py = y;
+	}
+}
 
 static void flush_fb(lv_display_t *d, const lv_area_t *a, uint8_t *px)
 {
@@ -29,19 +54,24 @@ static void flush_fb(lv_display_t *d, const lv_area_t *a, uint8_t *px)
 	uint8_t *page = fb.mem + fb.v.yoffset * fb.stride + fb.v.xoffset * fb.bpp;
 
 	for (int32_t y = a->y1; y <= a->y2; y++, px += w * fb.bpp) {
-		if (!fb.rot180) {
+		int x0, y0, x1, y1;
+
+		if (!fb.rot) {
 			memcpy(page + y * fb.stride + a->x1 * fb.bpp, px, w * fb.bpp);
 			continue;
 		}
-		uint8_t *dst = page + (fb.v.yres - 1 - y) * fb.stride + (fb.v.xres - 1 - a->x1) * fb.bpp;
+		phys(a->x1, y, &x0, &y0);
+		phys(a->x1 + 1, y, &x1, &y1);
+		uint8_t *dst = page + y0 * fb.stride + x0 * fb.bpp;
+		ptrdiff_t step = (y1 - y0) * (ptrdiff_t)fb.stride + (x1 - x0) * (ptrdiff_t)fb.bpp;
 		if (fb.bpp == 4) {
-			uint32_t *s = (uint32_t *)px, *t = (uint32_t *)dst;
-			for (int32_t x = 0; x < w; x++)
-				*(t - x) = s[x];
+			const uint32_t *s = (const uint32_t *)px;
+			for (int32_t x = 0; x < w; x++, dst += step)
+				*(uint32_t *)dst = s[x];
 		} else {
-			uint16_t *s = (uint16_t *)px, *t = (uint16_t *)dst;
-			for (int32_t x = 0; x < w; x++)
-				*(t - x) = s[x];
+			const uint16_t *s = (const uint16_t *)px;
+			for (int32_t x = 0; x < w; x++, dst += step)
+				*(uint16_t *)dst = s[x];
 		}
 	}
 	lv_display_flush_ready(d);
@@ -56,7 +86,7 @@ static void flush_mem(lv_display_t *d, const lv_area_t *a, uint8_t *px)
 	lv_display_flush_ready(d);
 }
 
-static lv_display_t *create_fb(const char *dev, bool rot180)
+static lv_display_t *create_fb(const char *dev)
 {
 	struct fb_fix_screeninfo f;
 	lv_display_t *d;
@@ -74,7 +104,6 @@ static lv_display_t *create_fb(const char *dev, bool rot180)
 	}
 	fb.stride = f.line_length;
 	fb.len = f.smem_len;
-	fb.rot180 = rot180;
 	fb.mem = mmap(NULL, fb.len, PROT_READ | PROT_WRITE, MAP_SHARED, fb.fd, 0);
 	if (fb.mem == MAP_FAILED) {
 		perror("fb mmap");
@@ -109,8 +138,31 @@ lv_display_t *disp_create(void)
 {
 	const char *rot = getenv("DISCUI_ROTATE");
 
-	display = app.host ? create_mem() : create_fb("/dev/fb0", !rot || strcmp(rot, "0"));
+	fb.mount = rot && !strcmp(rot, "0") ? 0 : 180;
+	display = app.host ? create_mem() : create_fb("/dev/fb0");
+	disp_set_rotation(set_get_int("ui.rotation"));
 	return display;
+}
+
+void disp_set_rotation(int deg)
+{
+	int r = ((fb.mount + deg) % 360 + 360) % 360 / 90 * 90;
+
+	if (r % 180 && fb.v.xres != fb.v.yres)
+		r = fb.mount;
+	if (r == fb.rot)
+		return;
+	fb.rot = r;
+	if (display && active) {
+		lv_obj_invalidate(lv_screen_active());
+		lv_obj_invalidate(lv_layer_top());
+		lv_obj_invalidate(lv_layer_sys());
+	}
+}
+
+int disp_rotation(void)
+{
+	return fb.rot;
 }
 
 void disp_set_active(bool on)
@@ -135,10 +187,7 @@ static uint32_t pixel(int x, int y)
 {
 	if (shadow)
 		return shadow[y * SCR_W + x];
-	if (fb.rot180) {
-		x = fb.v.xres - 1 - x;
-		y = fb.v.yres - 1 - y;
-	}
+	phys(x, y, &x, &y);
 	uint8_t *p = fb.mem + (fb.v.yoffset + y) * fb.stride + (fb.v.xoffset + x) * fb.bpp;
 	if (fb.bpp == 4)
 		return *(uint32_t *)p;

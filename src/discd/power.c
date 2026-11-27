@@ -29,7 +29,7 @@ static const char *const stage_names[] = { "none", "pre", "fast", "done" };
 static const char *const vbus_names[] = { "none", "sdp", "adapter", "3", "4", "5", "6", "otg" };
 static int i2c = -1;
 static int limit = 100, resume_drop = 5, ichg = ICHG_NORMAL, temp_max;
-static bool was_powered, too_hot;
+static bool was_powered, too_hot, full_once;
 static struct {
 	int cap, mv, ma, temp, status;
 	bool powered;
@@ -87,6 +87,13 @@ void power_reload(void)
 	temp_max = set_get_int("battery.temp_max") * 10;
 }
 
+void power_charge_full(bool on)
+{
+	if (on != full_once)
+		syslog(LOG_INFO, "charge limit %s", on ? "skipped until unplugged" : "back on");
+	full_once = on;
+}
+
 void power_init(void)
 {
 	power_reload();
@@ -108,7 +115,7 @@ static bool want_charging(bool on)
 		if (too_hot)
 			return false;
 	}
-	if (limit >= 100)
+	if (limit >= 100 || full_once)
 		return true;
 	if (!was_powered || on)
 		return bat.cap < limit;
@@ -133,6 +140,8 @@ bool power_tick(void)
 	}
 	bat.status = status;
 	bat.powered = status & PG_STAT;
+	if (!bat.powered)
+		full_once = false;
 	on = ctrl & CHG_CONFIG;
 	want = want_charging(on);
 	was_powered = bat.powered;
@@ -161,6 +170,7 @@ void power_status(struct kvbuf *b, bool full)
 	kv_int(b, "ma", bat.ma);
 	kv_int(b, "temp", bat.temp);
 	kv_int(b, "limit", limit);
+	kv_int(b, "skip", full_once);
 	kv_str(b, "state", bat.state);
 	kv_str(b, "vbus", bat.status < 0 ? "unknown" : vbus_names[(bat.status >> 5) & 7]);
 	kv_str(b, "stage", bat.status < 0 ? "unknown" : stage_names[(bat.status >> 3) & 3]);

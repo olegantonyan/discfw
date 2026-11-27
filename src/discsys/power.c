@@ -37,6 +37,7 @@ void power_status(struct kvbuf *b)
 	if (sys.bat.valid) {
 		kv_int(b, "cap", sys.bat.cap);
 		kv_str(b, "batstate", sys.bat.state);
+		kv_int(b, "batskip", sys.bat.skip);
 	}
 }
 
@@ -50,6 +51,24 @@ static void announce(void)
 	if (lowbat_src)
 		kv_int(&b, "lowbat", lowbat_left);
 	ev_kv(&b);
+}
+
+int power_charge_full(bool on)
+{
+	char msg[64];
+
+	if (sys.fake_hw) {
+		sys.bat.skip = on;
+		announce();
+	} else if (hw_request(on ? "charge full" : "charge limit", NULL, 0)) {
+		return -1;
+	}
+	if (on)
+		snprintf(msg, sizeof(msg), "Charging to 100%% once");
+	else
+		snprintf(msg, sizeof(msg), "Charge limit %d%%", set_get_int("battery.limit"));
+	ev_toast(msg);
+	return 0;
 }
 
 static gboolean lowbat_tick(gpointer data)

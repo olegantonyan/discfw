@@ -10,7 +10,7 @@ static void usage(void)
 {
 	fputs("usage: discfw get KEY | set KEY VALUE | reset KEY | list [PREFIX] | state | watch | cfg KEY\n"
 	      "              screen on|off|lock|unlock|toggle | key KEY [short|double|long] | action NAME\n"
-	      "              vol PCT|+N|-N | sleep MIN | toast TEXT | poweroff | reboot | library reset\n"
+	      "              vol PCT|+N|-N | sleep MIN | charge full|limit | toast TEXT | poweroff | reboot | library reset\n"
 	      "              mode player|storage|usbdac [once|always] (restarts into that mode)\n"
 	      "       discfw ui state | dump [top] | tap X Y | hold X Y [MS] | swipe X1 Y1 X2 Y2 [MS] | back | home |\n"
 	      "              goto SCREEN | folder PATH | shot PATH\n"

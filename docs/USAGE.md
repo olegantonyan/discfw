@@ -11,6 +11,7 @@ How to use the player with discfw: the UI, buttons, settings, network, Bluetooth
 - **Folders:** a letter strip for fast scrolling. Each folder remembers its position. Hold a row for its menu: play, shuffle, add to queue, create playlist, add to playlist. Folders that are not in the library yet play at once and are scanned in the background.
 - **Long names** scroll by themselves (`ui.marquee`: all, only the playing item, off). Hold a row and drag sideways to scroll its name by hand.
 - **Now playing:** to seek, drag along the edge ring, or hold the cover and turn it (one turn = 1 minute). Cover style: none, static, rotating or vinyl (`ui.cover_mode`). ≡ opens the menu.
+- **Screen rotation:** `ui.rotation` turns the picture and touch by 0°, 90°, 180° or 270°, as on stock; it applies at once. The boot logo and the buttons stay as they are.
 - **Accent color:** `ui.accent` (teal, cyan, blue, purple, pink, red, orange, amber, green). Changing it or `ui.font` restarts the UI.
 - **Playlists:** MPD stored playlists, each with its own play order.
 - **Settings:** made from the settings list below: battery, power profiles, library, buttons, screen, time zone, system.
@@ -94,19 +95,19 @@ Besides Player, the player has two USB modes. It restarts into a mode, either **
 ## Battery and power
 
 - The battery indicator is at the top of the screen. More details: Settings → Battery.
-- Charge limit `battery.limit` (50–100 %). While the player stays plugged in, charging starts again when the charge falls by `battery.resume_drop` %. `battery.current`: normal (1.3 A) or reduced (0.6 A). `battery.temp_max`: stop charging above this battery temperature (0 = off). How it works: [STOCK_KERNEL.md](STOCK_KERNEL.md#charger-sgm41513).
+- Charge limit `battery.limit` (50–100 %). While the player stays plugged in, charging starts again when the charge falls by `battery.resume_drop` %. While plugged in with a limit set, the ⚡ button in the pull-down charges to 100 % once; the limit is back on after unplugging (`discfw charge full|limit`). `battery.current`: normal (1.3 A) or reduced (0.6 A). `battery.temp_max`: stop charging above this battery temperature (0 = off). How it works: [STOCK_KERNEL.md](STOCK_KERNEL.md#charger-sgm41513).
 - Low battery: a warning at `power.lowbat_warn` %, then a 30 s countdown and power-off at `power.lowbat_off` % or below `power.lowbat_mv`.
 - Power profiles: `power.battery` and `power.charger` pick saver, balanced, performance or custom (`power.<profile>.*`: dim and off timeouts, idle power-off, animations).
 - Standby is a clean power-off. The next start restores the queue, position, folder and screen.
 - Sleep timer: `discfw sleep MIN` on the player; `play.sleep_action` chooses pause or power-off.
-- On the player: `discctl battery` prints `cap mv ma temp limit state vbus stage cycles health typec ichg`. States: `battery`, `charging`, `full`, `held` (stopped at the limit), `hot`, `idle`.
+- On the player: `discctl battery` prints `cap mv ma temp limit skip state vbus stage cycles health typec ichg`. States: `battery`, `charging`, `full`, `held` (stopped at the limit), `hot`, `idle`.
 
 ## DAC
 
 On the player, `discctl` talks to `discd`:
 
 ```
-discctl status | rate HZ | mute | unmute | release | vol 0..255|+|- | volpct 0..100 | off | reload | watch | battery
+discctl status | rate HZ | mute | unmute | release | vol 0..255|+|- | volpct 0..100 | off | reload | watch | battery | charge full|limit
 ```
 
 `vol` is attenuation in 0.5 dB steps. `release` mutes after 500 ms unless a new stream unmutes first. `audio.balance`, `audio.filter` and `audio.dre` use the stock driver's ioctls (applied only after you change them from the default). `audio.dac_idle_off` powers the DAC down after that many seconds of idle (experimental).

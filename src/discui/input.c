@@ -33,7 +33,6 @@ static struct {
 static enum gstate gs;
 static int gx, gy;
 static uint32_t gt;
-static bool rot180 = true;
 static bool (*back_cb)(void);
 static lv_obj_t *bulge, *bulge_arrow;
 
@@ -231,7 +230,9 @@ static void on_touch(int fd, short revents, void *ctx)
 		} else if (ev.type == EV_KEY && ev.code == BTN_TOUCH) {
 			raw.pressed = ev.value;
 		} else if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-			int x = rot180 ? SCR_W - raw.x : raw.x, y = rot180 ? SCR_H - raw.y : raw.y;
+			int r = disp_rotation();
+			int x = r == 90 ? raw.y : r == 180 ? SCR_W - raw.x : r == 270 ? SCR_W - raw.y : raw.x;
+			int y = r == 90 ? SCR_H - raw.x : r == 180 ? SCR_H - raw.y : r == 270 ? raw.x : raw.y;
 			input_inject(x, y, raw.pressed);
 		}
 	}
@@ -264,14 +265,12 @@ static int find_touch(char *path, size_t len)
 
 void input_init(void)
 {
-	const char *rot = getenv("DISCUI_ROTATE");
 	char path[64];
 	lv_indev_t *indev = lv_indev_create();
 	int fd;
 
 	lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
 	lv_indev_set_read_cb(indev, read_cb);
-	rot180 = !rot || strcmp(rot, "0");
 	if (app.host)
 		return;
 	if (find_touch(path, sizeof(path)) == 0 && (fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)) >= 0)

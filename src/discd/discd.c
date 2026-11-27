@@ -318,6 +318,14 @@ static void handle(struct client *cl, char *line)
 		power_status(&b, true);
 		goto reply;
 	}
+	if (!strcmp(cmd, "charge") && (!strcmp(arg, "full") || !strcmp(arg, "limit"))) {
+		power_charge_full(arg[0] == 'f');
+		power_tick();
+		event_bat();
+		kv_raw(&b, "ok");
+		power_status(&b, false);
+		goto reply;
+	}
 	if (!strcmp(cmd, "watch")) {
 		cl->watch = true;
 		kv_raw(&b, "ok");

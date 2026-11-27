@@ -44,6 +44,7 @@ static void parse_bat(const char *line)
 	b.mv = kv_get_int(line, "mv", 0);
 	b.ma = kv_get_int(line, "ma", 0);
 	b.temp = kv_get_int(line, "temp", 0);
+	b.skip = kv_get_int(line, "skip", 0);
 	kv_get(line, "state", b.state, sizeof(b.state));
 	kv_get(line, "vbus", b.vbus, sizeof(b.vbus));
 	kv_get(line, "stage", b.stage, sizeof(b.stage));

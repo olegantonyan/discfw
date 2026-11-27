@@ -12,6 +12,7 @@ enum boot_mode { MODE_PLAYER, MODE_STORAGE, MODE_USBDAC };
 struct bat {
 	bool valid;
 	int cap, mv, ma, temp;
+	bool skip;
 	char state[16], vbus[16], stage[16];
 };
 
@@ -124,6 +125,7 @@ void power_off(bool reboot);
 const char *power_profile(void);
 int power_profile_int(const char *field);
 void power_status(struct kvbuf *b);
+int power_charge_full(bool on);
 
 void eq_init(void);
 void eq_apply(void);
