@@ -55,7 +55,7 @@ struct sysstate {
 	char bt_dev[64];
 	char bt_name[64];
 	int bt_bat;
-	bool usb;
+	bool usb, mode_always;
 	int uac_rate;
 	int sleep_left;
 	bool powered;

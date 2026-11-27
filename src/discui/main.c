@@ -196,7 +196,11 @@ void fonts_init(void)
 
 void theme_apply(lv_display_t *d)
 {
-	app.accent = lv_palette_main(LV_PALETTE_TEAL);
+	static const lv_palette_t accents[] = { LV_PALETTE_TEAL, LV_PALETTE_CYAN, LV_PALETTE_BLUE, LV_PALETTE_PURPLE, LV_PALETTE_PINK,
+		LV_PALETTE_RED, LV_PALETTE_DEEP_ORANGE, LV_PALETTE_AMBER, LV_PALETTE_GREEN };
+	int i = set_get_enum("ui.accent");
+
+	app.accent = lv_palette_main(i >= 0 && i < (int)(sizeof(accents) / sizeof(accents[0])) ? accents[i] : LV_PALETTE_TEAL);
 	lv_display_set_theme(d, lv_theme_default_init(d, app.accent, lv_palette_main(LV_PALETTE_AMBER), true, app.font.m));
 	lv_obj_set_style_text_color(lv_layer_top(), lv_color_white(), 0);
 	lv_obj_set_style_text_font(lv_layer_top(), app.font.m, 0);

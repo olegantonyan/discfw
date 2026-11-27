@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define ALWAYS "Starts at every power-on."
+
 static lv_obj_t *status, *detail, *vol;
 static bool storage;
 
@@ -18,6 +20,7 @@ static void refresh(uint32_t evs, void *ctx)
 	(void)ctx;
 	if (storage) {
 		lv_label_set_text(status, app.sys.usb ? "USB connected" : "Plug into a computer");
+		lv_label_set_text_fmt(detail, "%sEject on the computer before unplugging.", app.sys.mode_always ? ALWAYS "\n" : "");
 		return;
 	}
 	if (r % 1000)
@@ -27,7 +30,7 @@ static void refresh(uint32_t evs, void *ctx)
 	else
 		snprintf(line, sizeof(line), "%s", app.sys.usb ? "Idle" : "Plug into a computer");
 	lv_label_set_text(status, line);
-	lv_label_set_text(detail, spdif ? "S/PDIF, fixed level" : "Internal DAC");
+	lv_label_set_text_fmt(detail, "%s%s", spdif ? "S/PDIF, fixed level" : "Internal DAC", app.sys.mode_always ? "\n" ALWAYS : "");
 	lv_obj_set_hidden(vol, spdif);
 	if (!lv_obj_has_state(vol, LV_STATE_PRESSED))
 		lv_slider_set_value(vol, app.sys.volume, LV_ANIM_OFF);
@@ -44,6 +47,8 @@ static void on_leave(lv_event_t *e)
 	(void)e;
 	if (storage && app.sys.usb)
 		ui_confirm("Eject the drive on the computer first. Back to player?", "Restart", leave, NULL);
+	else if (app.sys.mode_always)
+		ui_confirm("Leave for good and restart as a player?", "Restart", leave, NULL);
 	else
 		ui_confirm("Restart as a player?", "Restart", leave, NULL);
 }
@@ -61,17 +66,17 @@ static lv_obj_t *create(void *arg)
 	storage = !strcmp(disc_boot_mode(), "storage");
 	icon = ui_label(scr, app.font.icon_big, storage ? LV_SYMBOL_USB : LV_SYMBOL_AUDIO);
 	lv_obj_set_style_text_color(icon, app.accent, 0);
-	lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 62);
+	lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 50);
 	title = ui_label(scr, app.font.title, storage ? "USB storage" : "USB DAC");
-	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 124);
+	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 110);
 	status = ui_label(scr, app.font.m, "");
-	lv_obj_align(status, LV_ALIGN_TOP_MID, 0, 162);
-	detail = ui_label(scr, app.font.s, storage ? "Eject on the computer before unplugging." : "");
+	lv_obj_align(status, LV_ALIGN_TOP_MID, 0, 146);
+	detail = ui_label(scr, app.font.s, "");
 	lv_obj_set_width(detail, 270);
 	lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_WRAP);
 	lv_obj_set_style_text_align(detail, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_set_style_text_color(detail, lv_color_hex(0x9a9a9a), 0);
-	lv_obj_align(detail, LV_ALIGN_TOP_MID, 0, 194);
+	lv_obj_align(detail, LV_ALIGN_TOP_MID, 0, 178);
 	if (!storage) {
 		vol = lv_slider_create(scr);
 		lv_obj_set_width(vol, 200);

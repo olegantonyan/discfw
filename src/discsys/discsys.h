@@ -19,6 +19,7 @@ struct sys {
 	GMainLoop *loop;
 	bool fake_hw;
 	enum boot_mode mode;
+	bool mode_always;
 	int uac_rate;
 	struct bat bat;
 	bool powered;
@@ -74,6 +75,7 @@ bool library_mounted(void);
 
 void hw_init(void);
 void bt_init(void);
+void bt_play_state(void);
 int bt_command(const char *verb, const char *mac, struct kvbuf *out, char *err, size_t errlen);
 int wifi_command(const char *verb, const char *ssid, const char *pass, bool hidden, struct kvbuf *out, char *err, size_t errlen);
 void wifi_psk(const char *pass, const char *ssid, char out[65]);
@@ -84,7 +86,7 @@ void mode_init(void);
 const char *mode_name(void);
 bool mode_usb(void);
 void mode_on_bat(void);
-int mode_request(const char *name, char *err, size_t errlen);
+int mode_request(const char *name, const char *when, char *err, size_t errlen);
 void mode_uac(int rate);
 
 void volume_init(void);

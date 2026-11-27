@@ -147,6 +147,8 @@ int cfg_set(const char *key, const char *val)
 	if (save_src)
 		g_source_remove(save_src);
 	save_src = g_timeout_add_seconds(SAVE_DELAY_S, save_now, NULL);
+	if (!strcmp(key, "ui.font") || !strcmp(key, "ui.accent"))
+		cfg_flush();
 	kv_init(&b);
 	kv_raw(&b, "!set");
 	kv_str(&b, "key", key);

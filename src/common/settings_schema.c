@@ -26,6 +26,8 @@
 const struct set_def set_defs[] = {
 	I("ui.brightness", "30", 1, 40, 1, "display", "Brightness", NULL),
 	E("ui.font", "medium", "small=Small|medium=Medium|large=Large", "display", "Font size"),
+	E("ui.accent", "teal", "teal=Teal|cyan=Cyan|blue=Blue|purple=Purple|pink=Pink|red=Red|orange=Orange|amber=Amber|green=Green",
+	  "display", "Accent color"),
 	E("ui.cover_mode", "static", "none=None|static=Static|rotating=Rotating|vinyl=Vinyl", "display", "Cover"),
 	I("ui.anim_fps", "12", 4, 30, 1, "display", "Animation frame rate", "fps"),
 	E("ui.start_screen", "last", "last=Last screen|home=Home|folders=Folders|nowplaying=Now playing", "display", "Start screen"),

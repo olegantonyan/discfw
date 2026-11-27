@@ -9,7 +9,7 @@ What you get today:
 
 - Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
 - A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
-- Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level.
+- Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level and buttons (play, pause, next, previous).
 - USB storage mode (the PC gets the music card) and USB DAC mode (the player is the PC's sound card), S/PDIF output on the 3.5 mm jack.
 - Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
 - Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
@@ -26,7 +26,7 @@ What you get today:
 
 Works: everything in the list above. See [docs/USAGE.md](docs/USAGE.md) for details.
 
-Not yet: headphone buttons (AVRCP), Bluetooth receiver mode, equalizer, IPv6. The music card is read-only on the player; copy music in USB storage mode or with a card reader. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
+Not yet: Bluetooth receiver mode, equalizer, IPv6. The music card is read-only on the player; copy music in USB storage mode or with a card reader. The clock comes from the network (NTP) because the stock kernel does not run the RTC. Some settings in the UI do nothing yet (list in [docs/USAGE.md](docs/USAGE.md#settings)).
 
 ## Hardware
 

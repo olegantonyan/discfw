@@ -435,6 +435,11 @@ static void do_power(void *ctx)
 	sysc_send("%s", (const char *)ctx);
 }
 
+static void mode_picked(int idx, void *ctx)
+{
+	sysc_send("mode %s %s", (const char *)ctx, idx ? "always" : "once");
+}
+
 static const int sleep_mins[] = { 0, 15, 30, 45, 60, 90, 120 };
 
 static void sleep_picked(int idx, void *ctx)
@@ -469,10 +474,10 @@ static void click(void *ctx, int idx)
 		ui_confirm("Delete the library database and scan again?", "Reset", lib_reset, NULL);
 		break;
 	case A_STORAGE:
-		ui_confirm("Restart as USB storage? The computer gets the music card; the player can't play until you leave.", "Restart", do_power, "mode storage");
+		ui_choice("Restart as USB storage? The player can't play until you leave.", "Once", "Always", mode_picked, "storage");
 		break;
 	case A_USBDAC:
-		ui_confirm("Restart as USB DAC? Leave from its screen; the USB shell is off in this mode.", "Restart", do_power, "mode usbdac");
+		ui_choice("Restart as USB DAC? The USB shell is off in this mode.", "Once", "Always", mode_picked, "usbdac");
 		break;
 	case A_REBOOT:
 		ui_confirm("Reboot now?", "Reboot", do_power, "reboot");
@@ -481,8 +486,7 @@ static void click(void *ctx, int idx)
 		ui_confirm("Power off now?", "Power off", do_power, "poweroff");
 		break;
 	case A_RESTART_UI:
-		state_save();
-		exit(0);
+		ui_restart();
 	case A_RESET_UI:
 		ui_confirm("Forget remembered folder positions and playlist order?", "Forget", reset_ui, NULL);
 		break;
@@ -491,7 +495,7 @@ static void click(void *ctx, int idx)
 		break;
 	case A_PROFILE:
 		snprintf(page, sizeof(page), "power.%s", s->arg);
-		nav_push(&scr_settings_page, strdup(page));
+		nav_push(&scr_settings_page, page);
 		break;
 	case A_SLEEP:
 		ui_pick("Sleep timer", sleep_labels, 7, -1, sleep_picked, NULL);
@@ -552,9 +556,8 @@ static lv_obj_t *page_create(void *arg)
 	struct spage *p = calloc(1, sizeof(*p));
 
 	snprintf(p->id, sizeof(p->id), "%s", (const char *)arg);
-	if (!strncmp(p->id, "power.", 6))
-		free(arg);
 	p->scr = ui_screen(page_title(p->id), NULL);
+	lv_obj_set_user_data(p->scr, p);
 	p->list = vlist_create(p->scr, &page_ops, p);
 	lv_obj_set_size(p->list, SCR_W, SCR_H - CONTENT_Y);
 	lv_obj_set_pos(p->list, 0, CONTENT_Y);
@@ -569,6 +572,15 @@ static lv_obj_t *page_create(void *arg)
 void settings_open_page(const char *page)
 {
 	nav_push(&scr_settings_page, (void *)page);
+}
+
+const char *settings_page_id(void)
+{
+	struct spage *p;
+
+	if (nav_top() != &scr_settings_page || !(p = lv_obj_get_user_data(lv_screen_active())))
+		return NULL;
+	return p->id;
 }
 
 const struct screen_ops scr_settings_page = { .name = "settings_page", .create = page_create };

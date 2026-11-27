@@ -30,7 +30,7 @@ start() {
 	now=$(date +%s)
 	saved=$(cat $S/clock 2>/dev/null)
 	[ -n "$saved" ] && [ "$saved" -gt "$now" ] && date -s "@$saved" >/dev/null
-	mode=$(cat $S/mode.next 2>/dev/null)
+	mode=$(cat $S/mode.next 2>/dev/null || cat $S/mode.default 2>/dev/null)
 	rm -f $S/mode.next
 	case "$mode" in storage | usbdac) ;; *) mode=player ;; esac
 	echo $mode > /run/discfw.mode

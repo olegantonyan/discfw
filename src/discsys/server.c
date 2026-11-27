@@ -95,6 +95,7 @@ static void snapshot(struct client *cl, const char *tag)
 	kv_int(&b, "btbat", sys.bt_bat);
 	kv_str(&b, "mode", mode_name());
 	kv_int(&b, "usb", mode_usb());
+	kv_int(&b, "always", sys.mode_always);
 	kv_int(&b, "uacrate", sys.uac_rate);
 	kv_int(&b, "sleep", sys.sleep_left_s);
 	power_status(&b);
@@ -246,7 +247,7 @@ static void handle(struct client *cl, char *line)
 			ok(cl);
 	} else if (!strcmp(cmd, "mode")) {
 		char e[96];
-		if (mode_request(a1, e, sizeof(e)))
+		if (mode_request(a1, a2, e, sizeof(e)))
 			err(cl, e);
 		else
 			ok(cl);

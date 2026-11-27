@@ -31,6 +31,7 @@ static void announce(void)
 	kv_raw(&b, "!mode");
 	kv_str(&b, "name", mode_name());
 	kv_int(&b, "usb", mode_usb());
+	kv_int(&b, "always", sys.mode_always);
 	ev_kv(&b);
 }
 
@@ -58,7 +59,7 @@ void mode_on_bat(void)
 		last = usb;
 		announce();
 	}
-	if (sys.mode != MODE_STORAGE)
+	if (sys.mode != MODE_STORAGE || sys.mode_always)
 		return;
 	if (usb)
 		usb_seen = true;
@@ -86,10 +87,10 @@ static gboolean eject_poll(gpointer data)
 	return G_SOURCE_CONTINUE;
 }
 
-static int write_next(const char *name)
+static int write_mode_file(const char *file, const char *name)
 {
 	char tmp[256];
-	const char *path = disc_data_path("mode.next");
+	const char *path = disc_data_path(file);
 	FILE *f;
 
 	snprintf(tmp, sizeof(tmp), "%s.new", path);
@@ -101,15 +102,29 @@ static int write_next(const char *name)
 	return 0;
 }
 
-int mode_request(const char *name, char *err, size_t errlen)
+static int remove_mode_file(const char *file)
 {
-	bool player = !strcmp(name, "player");
+	return unlink(disc_data_path(file)) && errno != ENOENT ? -1 : 0;
+}
 
-	if (!player && strcmp(name, "storage") && strcmp(name, "usbdac")) {
-		snprintf(err, errlen, "usage: mode player|storage|usbdac");
+static int save_mode(const char *name, bool always)
+{
+	if (!strcmp(name, "player"))
+		return remove_mode_file("mode.next") || remove_mode_file("mode.default");
+	if (always)
+		return write_mode_file("mode.default", name) || remove_mode_file("mode.next");
+	return write_mode_file("mode.next", name) || remove_mode_file("mode.default");
+}
+
+int mode_request(const char *name, const char *when, char *err, size_t errlen)
+{
+	bool player = !strcmp(name, "player"), always = !strcmp(when, "always");
+
+	if ((!player && strcmp(name, "storage") && strcmp(name, "usbdac")) || (when[0] && !always && strcmp(when, "once"))) {
+		snprintf(err, errlen, "usage: mode player|storage|usbdac [once|always]");
 		return -1;
 	}
-	if (!strcmp(name, mode_name())) {
+	if (!player && !strcmp(name, mode_name())) {
 		snprintf(err, errlen, "already in %s mode", name);
 		return -1;
 	}
@@ -117,11 +132,13 @@ int mode_request(const char *name, char *err, size_t errlen)
 		snprintf(err, errlen, "no music card");
 		return -1;
 	}
-	if (player ? unlink(disc_data_path("mode.next")) && errno != ENOENT : write_next(name)) {
+	if (save_mode(name, always)) {
 		snprintf(err, errlen, "cannot save the mode: %s", strerror(errno));
 		return -1;
 	}
-	logmsg(LOG_INFO, "restarting into %s mode", name);
+	if (player && sys.mode == MODE_PLAYER)
+		return 0;
+	logmsg(LOG_INFO, "restarting into %s mode%s", name, always ? " (always)" : "");
 	power_off(true);
 	return 0;
 }
@@ -147,12 +164,19 @@ void mode_init(void)
 	sys.mode = !strcmp(m, "storage") ? MODE_STORAGE : !strcmp(m, "usbdac") ? MODE_USBDAC : MODE_PLAYER;
 	if (sys.mode == MODE_PLAYER)
 		return;
-	logmsg(LOG_INFO, "%s mode", m);
+	if ((f = fopen(disc_data_path("mode.default"), "r"))) {
+		char line[32] = "";
+		if (fgets(line, sizeof(line), f))
+			line[strcspn(line, "\n")] = 0;
+		sys.mode_always = !strcmp(line, m);
+		fclose(f);
+	}
+	logmsg(LOG_INFO, "%s mode%s", m, sys.mode_always ? " (always)" : "");
 	volume_init();
 	if (sys.mode != MODE_STORAGE)
 		return;
 	if ((f = fopen(disc_data_path("usb-storage.used"), "w")))
 		fclose(f);
-	if (!sys.fake_hw)
+	if (!sys.fake_hw && !sys.mode_always)
 		g_timeout_add_seconds(1, eject_poll, NULL);
 }

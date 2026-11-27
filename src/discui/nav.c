@@ -187,6 +187,7 @@ void nav_start(void)
 {
 	const char *start = set_get("ui.start_screen");
 	const struct screen_ops *target = NULL;
+	char reopen[32];
 
 	status = ui_label(lv_layer_top(), &lv_font_montserrat_14, "");
 	lv_obj_align(status, LV_ALIGN_TOP_MID, 0, STATUS_Y);
@@ -205,8 +206,14 @@ void nav_start(void)
 		target = by_name(state_get("screen"));
 	else
 		target = by_name(start);
+	snprintf(reopen, sizeof(reopen), "%s", !app.safe_mode && state_get("reopen") ? state_get("reopen") : "");
+	state_set("reopen", NULL);
 	nav_push(&scr_home, NULL);
-	if (target && target != &scr_home)
+	if (reopen[0]) {
+		nav_push(&scr_settings, NULL);
+		settings_open_page(reopen);
+	} else if (target && target != &scr_home) {
 		nav_push(target, NULL);
+	}
 	status_update(0, NULL);
 }

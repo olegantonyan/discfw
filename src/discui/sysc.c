@@ -125,6 +125,7 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		kv_get(line, "btdev", app.sys.bt_dev, sizeof(app.sys.bt_dev));
 		parse_bt(line, "btname", "btbat");
 		app.sys.usb = kv_get_int(line, "usb", 0);
+		app.sys.mode_always = kv_get_int(line, "always", 0);
 		app.sys.uac_rate = kv_get_int(line, "uacrate", 0);
 		app.sys.sleep_left = kv_get_int(line, "sleep", 0);
 		parse_power(line);
@@ -142,6 +143,7 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		app_notify(EV_SYS);
 	} else if (!strcmp(tag, "!mode")) {
 		app.sys.usb = kv_get_int(line, "usb", 0);
+		app.sys.mode_always = kv_get_int(line, "always", 0);
 		app_notify(EV_SYS);
 	} else if (!strcmp(tag, "!uac")) {
 		app.sys.uac_rate = kv_get_int(line, "rate", 0);
@@ -159,10 +161,8 @@ static void on_line(struct lconn *c, char *line, void *arg)
 		kv_get(line, "key", key, sizeof(key));
 		kv_get(line, "val", v, sizeof(v));
 		set_put(key, v);
-		if (!strcmp(key, "ui.font")) {
-			state_save();
-			exit(0);
-		}
+		if (!strcmp(key, "ui.font") || !strcmp(key, "ui.accent"))
+			ui_restart();
 		app_notify(EV_SETTINGS);
 	} else if (!strcmp(tag, "!mount")) {
 		fsdir_invalidate();

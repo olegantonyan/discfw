@@ -1,8 +1,10 @@
 #include "ui.h"
 
+#include <disc/paths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_MODALS 6
 #define TOAST_MS 2500
@@ -355,7 +357,7 @@ static void btn_result(lv_event_t *e)
 	modal_finish(m, (int)(intptr_t)lv_obj_get_user_data(lv_event_get_target_obj(e)));
 }
 
-static void two_buttons(struct modal *m, const char *no, const char *yes, int y)
+static void two_buttons(struct modal *m, const char *no, const char *yes, int y, bool grey_no)
 {
 	lv_obj_t *b;
 
@@ -363,26 +365,45 @@ static void two_buttons(struct modal *m, const char *no, const char *yes, int y)
 	lv_obj_set_user_data(b, (void *)(intptr_t)0);
 	lv_obj_set_size(b, 110, 48);
 	lv_obj_align(b, LV_ALIGN_CENTER, -62, y);
-	lv_obj_set_style_bg_color(b, lv_color_hex(0x404040), 0);
+	if (grey_no)
+		lv_obj_set_style_bg_color(b, lv_color_hex(0x404040), 0);
 	b = ui_text_button(m->root, yes, btn_result, m);
 	lv_obj_set_user_data(b, (void *)(intptr_t)1);
 	lv_obj_set_size(b, 110, 48);
 	lv_obj_align(b, LV_ALIGN_CENTER, 62, y);
 }
 
-void ui_confirm(const char *text, const char *yes, void (*cb)(void *ctx), void *ctx)
+void ui_restart(void)
+{
+	state_set("reopen", settings_page_id());
+	state_save();
+	unlink(disc_run_path("discui.starts"));
+	exit(0);
+}
+
+static struct modal *question(const char *text, void *cb, void *ctx, void (*on_close)(struct modal *m, int result))
 {
 	struct modal *m = modal_new(NULL);
 	lv_obj_t *l = ui_label(m->root, app.font.l, text);
 
 	m->cb = cb;
 	m->ctx = ctx;
-	m->on_close = confirm_closed;
+	m->on_close = on_close;
 	lv_obj_set_width(l, 260);
 	lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
 	lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_align(l, LV_ALIGN_CENTER, 0, -40);
-	two_buttons(m, "Cancel", yes, 60);
+	return m;
+}
+
+void ui_confirm(const char *text, const char *yes, void (*cb)(void *ctx), void *ctx)
+{
+	two_buttons(question(text, cb, ctx, confirm_closed), "Cancel", yes, 60, true);
+}
+
+void ui_choice(const char *text, const char *a, const char *b, ui_pick_cb cb, void *ctx)
+{
+	two_buttons(question(text, cb, ctx, menu_closed), a, b, 60, false);
 }
 
 void ui_info(const char *title, const char *text)
@@ -499,5 +520,5 @@ void ui_number_input(const char *title, int val, int min, int max, int step, con
 	lv_obj_align(m->slider, LV_ALIGN_CENTER, 0, 20);
 	lv_obj_add_event_cb(m->slider, number_slide, LV_EVENT_VALUE_CHANGED, m);
 	number_show(m);
-	two_buttons(m, "Cancel", "OK", 90);
+	two_buttons(m, "Cancel", "OK", 90, true);
 }

@@ -8,6 +8,8 @@
 #include <syslog.h>
 
 #define AGENT_PATH "/org/discfw/agent"
+#define PLAYER_PATH "/org/discfw/player"
+#define PLAYER_IFACE "org.mpris.MediaPlayer2.Player"
 #define A2DP_SINK "0000110b-0000-1000-8000-00805f9b34fb"
 #define CALL_MS 30000
 #define UPDATE_MS 200
@@ -15,8 +17,9 @@
 
 static GDBusObjectManager *om;
 static GDBusConnection *bus;
-static guint agent_id, scan_src, update_src;
+static guint agent_id, player_id, scan_src, update_src;
 static gint64 pair_until;
+static char player_adapter[64];
 
 static const char agent_xml[] = "<node><interface name='org.bluez.Agent1'>"
 				"<method name='Release'/>"
@@ -55,6 +58,40 @@ static void agent_call(GDBusConnection *c, const gchar *sender, const gchar *pat
 
 static const GDBusInterfaceVTable agent_vtable = { .method_call = agent_call };
 
+static const char player_xml[] = "<node><interface name='" PLAYER_IFACE "'>"
+				 "<method name='Play'/><method name='Pause'/><method name='PlayPause'/><method name='Stop'/>"
+				 "<method name='Next'/><method name='Previous'/>"
+				 "</interface></node>";
+
+static void player_call(GDBusConnection *c, const gchar *sender, const gchar *path, const gchar *iface, const gchar *method,
+			GVariant *params, GDBusMethodInvocation *inv, gpointer data)
+{
+	bool playing = sys.play == PS_PLAY;
+
+	(void)c;
+	(void)sender;
+	(void)path;
+	(void)iface;
+	(void)params;
+	(void)data;
+	logmsg(LOG_INFO, "bluetooth: headset %s", method);
+	if (!strcmp(method, "Next"))
+		action_run("next");
+	else if (!strcmp(method, "Previous"))
+		action_run("prev");
+	else if (!strcmp(method, "PlayPause") || (!strcmp(method, "Play") ? !playing : playing))
+		action_run("play_pause");
+	g_dbus_method_invocation_return_value(inv, NULL);
+}
+
+static const GDBusInterfaceVTable player_vtable = { .method_call = player_call };
+
+static void add_status(GVariantBuilder *b)
+{
+	g_variant_builder_add(b, "{sv}", "PlaybackStatus",
+			      g_variant_new_string(sys.play == PS_PLAY ? "Playing" : sys.play == PS_PAUSE ? "Paused" : "Stopped"));
+}
+
 static void call_done(GObject *src, GAsyncResult *res, gpointer data)
 {
 	GError *e = NULL;
@@ -78,6 +115,55 @@ static void register_agent(void)
 	g_dbus_connection_call(bus, "org.bluez", "/org/bluez", "org.bluez.AgentManager1", "RequestDefaultAgent",
 			       g_variant_new("(o)", AGENT_PATH), NULL, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, call_done,
 			       "RequestDefaultAgent");
+}
+
+static void register_player(const char *adapter_path)
+{
+	static const char *const caps[] = { "CanControl", "CanPlay", "CanPause", "CanGoNext", "CanGoPrevious" };
+	GVariantBuilder b;
+
+	g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
+	add_status(&b);
+	for (size_t i = 0; i < G_N_ELEMENTS(caps); i++)
+		g_variant_builder_add(&b, "{sv}", caps[i], g_variant_new_boolean(TRUE));
+	g_variant_builder_add(&b, "{sv}", "Identity", g_variant_new_string("discfw"));
+	g_dbus_connection_call(bus, "org.bluez", adapter_path, "org.bluez.Media1", "RegisterPlayer",
+			       g_variant_new("(o@a{sv})", PLAYER_PATH, g_variant_builder_end(&b)), NULL, G_DBUS_CALL_FLAGS_NONE,
+			       5000, NULL, call_done, "RegisterPlayer");
+}
+
+static void player_sync(void)
+{
+	GList *objs = om && player_id ? g_dbus_object_manager_get_objects(om) : NULL;
+	const char *path = NULL;
+
+	for (GList *l = objs; l && !path; l = l->next) {
+		GDBusInterface *i = g_dbus_object_get_interface(l->data, "org.bluez.Media1");
+		if (i) {
+			path = g_dbus_object_get_object_path(l->data);
+			g_object_unref(i);
+		}
+	}
+	if (!path) {
+		player_adapter[0] = 0;
+	} else if (strcmp(path, player_adapter)) {
+		snprintf(player_adapter, sizeof(player_adapter), "%s", path);
+		logmsg(LOG_INFO, "bluetooth: registering the headset button player on %s", path);
+		register_player(path);
+	}
+	g_list_free_full(objs, g_object_unref);
+}
+
+void bt_play_state(void)
+{
+	GVariantBuilder b;
+
+	if (!bus || !player_adapter[0])
+		return;
+	g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
+	add_status(&b);
+	g_dbus_connection_emit_signal(bus, NULL, PLAYER_PATH, "org.freedesktop.DBus.Properties", "PropertiesChanged",
+				      g_variant_new("(sa{sv}as)", PLAYER_IFACE, &b, NULL), NULL);
 }
 
 static GDBusProxy *iface_of(GDBusObject *o, const char *name)
@@ -223,6 +309,7 @@ static void on_object(GDBusObjectManager *m, GDBusObject *o, gpointer data)
 	(void)m;
 	(void)o;
 	(void)data;
+	player_sync();
 	schedule_update();
 }
 
@@ -255,6 +342,7 @@ static void on_owner(GObject *obj, GParamSpec *spec, gpointer data)
 	if (owner) {
 		logmsg(LOG_INFO, "bluetoothd up, registering agent");
 		register_agent();
+		player_sync();
 	}
 	g_free(owner);
 	schedule_update();
@@ -279,6 +367,13 @@ static void om_ready(GObject *src, GAsyncResult *res, gpointer data)
 	g_dbus_node_info_unref(info);
 	if (!agent_id) {
 		logmsg(LOG_ERR, "agent export: %s", e->message);
+		g_clear_error(&e);
+	}
+	info = g_dbus_node_info_new_for_xml(player_xml, NULL);
+	player_id = g_dbus_connection_register_object(bus, PLAYER_PATH, info->interfaces[0], &player_vtable, NULL, NULL, &e);
+	g_dbus_node_info_unref(info);
+	if (!player_id) {
+		logmsg(LOG_ERR, "player export: %s", e->message);
 		g_clear_error(&e);
 	}
 	g_signal_connect(om, "notify::name-owner", G_CALLBACK(on_owner), NULL);

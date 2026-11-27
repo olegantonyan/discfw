@@ -106,8 +106,10 @@ void mpdc_refresh(void)
 	mpd_status_free(s);
 	if (vol >= 0 && vol != sys.volume && sys.outputs_enabled == 1)
 		volume_on_mixer(vol);
-	if (prev != sys.play)
+	if (prev != sys.play) {
 		power_on_play_state();
+		bt_play_state();
+	}
 }
 
 void mpdc_apply_order(void)

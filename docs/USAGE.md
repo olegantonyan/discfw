@@ -11,6 +11,7 @@ How to use the player with discfw: the UI, buttons, settings, network, Bluetooth
 - **Folders:** a letter strip for fast scrolling. Each folder remembers its position. Hold a row for its menu: play, shuffle, add to queue, create playlist, add to playlist. Folders that are not in the library yet play at once and are scanned in the background.
 - **Long names** scroll by themselves (`ui.marquee`: all, only the playing item, off). Hold a row and drag sideways to scroll its name by hand.
 - **Now playing:** to seek, drag along the edge ring, or hold the cover and turn it (one turn = 1 minute). Cover style: none, static, rotating or vinyl (`ui.cover_mode`). ≡ opens the menu.
+- **Accent color:** `ui.accent` (teal, cyan, blue, purple, pink, red, orange, amber, green). Changing it or `ui.font` restarts the UI.
 - **Playlists:** MPD stored playlists, each with its own play order.
 - **Settings:** made from the settings list below: battery, power profiles, library, buttons, screen, time zone, system.
 - If the UI crashes twice within 10 s, it starts in a safe mode.
@@ -79,14 +80,14 @@ These settings are shown but **do nothing yet**: `time.ntp`, `play.through_folde
 - Codecs: SBC, aptX, aptX HD (bluez-alsa). When headphones connect, MPD switches to them; when they disconnect, playback pauses, so no sound comes out of the jack by surprise. Paired headphones reconnect by themselves.
 - From the PC over USB: `scripts/disc-bt on | off | scan [SECS] | pair MAC | connect MAC | disconnect [MAC] | forget MAC | list | status`.
 - On the player: `discfw bt list | scan [SECS] | pair|connect|disconnect|forget MAC`.
-- Headphone buttons (AVRCP) do not control playback yet.
+- Headphone buttons (AVRCP): play, pause, next and previous track. discsys registers with BlueZ as a media player (`Media1.RegisterPlayer`), so no `uinput` is needed.
 
 ## USB storage and USB DAC
 
-Besides Player, the player has two USB modes. It restarts into a mode, and any restart or power-off returns to Player.
+Besides Player, the player has two USB modes. It restarts into a mode, either **Once** (any restart or power-off returns to Player) or **Always** (it starts in that mode at every power-on until you leave with "Back to player").
 
-- **Enter:** Settings → System → USB storage… or USB DAC…, or `discfw mode storage|usbdac` on the player.
-- **USB storage:** the computer sees the whole microSD card as a removable drive, read-write, next to the serial shell. Nothing plays meanwhile. The player returns to Player when the computer ejects the drive, when the cable is unplugged, or with "Back to player" (eject on the computer first). Then it scans the library (`lib.scan_after_usb`, on by default).
+- **Enter:** Settings → System → USB storage… or USB DAC…, or `discfw mode storage|usbdac [once|always]` on the player. Once is stored in `/usr/data/discfw/mode.next` and Always in `mode.default`; `discfw mode player` clears both.
+- **USB storage:** the computer sees the whole microSD card as a removable drive, read-write, next to the serial shell. Nothing plays meanwhile. The player returns to Player with "Back to player" (eject on the computer first) and, in Once mode, also when the computer ejects the drive or the cable is unplugged. Then it scans the library (`lib.scan_after_usb`, on by default).
 - **USB DAC:** a USB Audio Class 2 sound card "discfw USB DAC": stereo, 32-bit, 32–384 kHz. The player measures the rate from the incoming audio. The volume keys and the slider on its screen set the DAC volume; the computer's volume scales the signal. Output goes to the DAC, or to S/PDIF with `audio.spdif` (352.8 and 384 kHz are halved for S/PDIF). Clock drift between the computer and the player is absorbed by dropping or repeating single samples, at most 500 ppm. There is no USB serial shell in this mode (the kernel allows UAC2 only as the sole USB function), so use SSH. Leave with "Back to player". No DSD.
 - While USB power is present, these modes never power off when idle.
 
@@ -131,4 +132,4 @@ discfw ui state | dump [top] | tap X Y | hold X Y [MS] | swipe X1 Y1 X2 Y2 [MS] 
 
 - **Time zone:** `time.zone` (list in `/usr/share/discfw/zones.tsv`). The clock shows `?` until NTP has set the time after boot.
 - **Logs:** `logread` (a 256 KB ring in RAM).
-- **State on the data partition** (`/usr/data/discfw/`, UBIFS, mounted `sync`; FiiO's files there stay untouched): `settings`, `wifi/`, `bluetooth/` (pairings), `bluealsa/`, `ssh/` (host keys, `root/authorized_keys`), `mpd/` (database, state, playlists), `hostname`, `clock`, `TZ`, `mode.next` (the mode for the next boot, used once), `boot/` (one-time test boot, see [DEVELOPMENT.md](DEVELOPMENT.md#test-without-flashing)). If the partition does not mount, a RAM disk is used instead and nothing is formatted.
+- **State on the data partition** (`/usr/data/discfw/`, UBIFS, mounted `sync`; FiiO's files there stay untouched): `settings`, `wifi/`, `bluetooth/` (pairings), `bluealsa/`, `ssh/` (host keys, `root/authorized_keys`), `mpd/` (database, state, playlists), `hostname`, `clock`, `TZ`, `mode.next` (the mode for the next boot, used once), `mode.default` (the mode at every boot), `boot/` (one-time test boot, see [DEVELOPMENT.md](DEVELOPMENT.md#test-without-flashing)). If the partition does not mount, a RAM disk is used instead and nothing is formatted.

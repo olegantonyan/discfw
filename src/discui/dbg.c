@@ -172,7 +172,7 @@ static void handle(struct lconn *c, char *line)
 	} else if (!strcmp(cmd, "folder"))
 		folders_open_at(a[0], a[1][0] ? a[1] : NULL);
 	else if (!strcmp(cmd, "page"))
-		settings_open_page(strdup(a[0]));
+		settings_open_page(a[0]);
 	else if (!strcmp(cmd, "shot")) {
 		lv_refr_now(NULL);
 		if (disp_shot(a[0][0] ? a[0] : "/tmp/discui.png")) {

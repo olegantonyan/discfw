@@ -59,7 +59,7 @@ Patches to packages:
 | Modules | stock `utils soc_utils soc_gpio soc_msc soc_adc` with stock parameters | SD card, SDIO, GPIO, ADC |
 | UI | `discui`, LVGL 9.6 (static), own fbdev flush with 180° rotation, own touch reader and gesture layer, a `poll()` loop that sleeps while the screen is off, recycled list rows, cover art in a worker thread (libjpeg-turbo DCT scaling, libpng). DejaVu Sans through tiny_ttf for accented names. | The panel is mounted upside down. |
 | Formats | MPD: FLAC, MP3 (mpg123), Ogg/Opus, WAV/AIFF (libsndfile), and ffmpeg with only the AAC, ALAC, APE, WavPack, WMA and TTA decoders | the stock formats without a full ffmpeg |
-| USB | configfs gadget per boot mode (`S14usbgadget`, mode from `/run/discfw.mode`): Player = ACM; USB storage = ACM + `mass_storage` on `/dev/mmcblk0`; USB DAC = `uac2` alone, bridged to the DAC by `discuac` | FiiO's kernel drops every other function from a config with `uac2`, and unbinding it mid-stream is unsafe, so each gadget is built once per boot. Modes switch by restarting: `mode.next` is read once by `S13data`. |
+| USB | configfs gadget per boot mode (`S14usbgadget`, mode from `/run/discfw.mode`): Player = ACM; USB storage = ACM + `mass_storage` on `/dev/mmcblk0`; USB DAC = `uac2` alone, bridged to the DAC by `discuac` | FiiO's kernel drops every other function from a config with `uac2`, and unbinding it mid-stream is unsafe, so each gadget is built once per boot. Modes switch by restarting: `S13data` reads `mode.next` once, else `mode.default`. |
 | S/PDIF | `audio.spdif`: MPD plays to `hw:0,4` (DMA4 → `LO2_MUX`), 24-bit, ≤192 kHz; discd keeps the DAC powered down | as stock; the 3.5 mm jack carries the S/PDIF line while the DAC amps are off |
 | Reboot | `/sbin/reboot` wrapper → `discreset` (watchdog reset) | the kernel's restart path hangs |
 
@@ -122,7 +122,6 @@ From 2026-11-25, before the current UI and discsys. They need to be measured aga
 ## Roadmap
 
 - **USB DAC:** native DSD (the gadget's alt setting 2) and DoP.
-- **Headphone buttons (AVRCP):** need `uinput`, which the stock kernel lacks.
 - **Jack status** from the ADC; equalizer; the settings that do nothing yet ([USAGE.md](USAGE.md#settings)).
 - **Power:** radios off when not used, DAC low power when idle (`audio.dac_idle_off`, experimental), measure the battery current.
 - **Measure again** skip latency, boot time and memory with the current UI.

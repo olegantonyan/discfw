@@ -34,6 +34,7 @@ typedef void (*ui_pick_cb)(int idx, void *ctx);
 void ui_menu(const char *title, const char *const *items, int n, ui_pick_cb cb, void *ctx);
 void ui_pick(const char *title, const char *const *items, int n, int selected, ui_pick_cb cb, void *ctx);
 void ui_confirm(const char *text, const char *yes, void (*cb)(void *ctx), void *ctx);
+void ui_choice(const char *text, const char *a, const char *b, ui_pick_cb cb, void *ctx);
 void ui_text_input(const char *title, const char *initial, bool secret, void (*cb)(const char *text, void *ctx), void *ctx);
 void ui_number_input(const char *title, int val, int min, int max, int step, const char *unit, void (*cb)(int v, void *ctx), void *ctx);
 void ui_info(const char *title, const char *text);
@@ -95,4 +96,6 @@ extern const struct screen_ops scr_home, scr_folders, scr_np, scr_queue, scr_pla
 
 void folders_open_at(const char *path, const char *select_name);
 void settings_open_page(const char *page);
+const char *settings_page_id(void);
+_Noreturn void ui_restart(void);
 const char *fmt_time(char *buf, size_t len, unsigned ms);
