@@ -7,7 +7,7 @@ discfw replaces the software of the [FiiO Snowsky Disc](https://www.fiio.com/) m
 
 What you get today:
 
-- Music playback with [MPD](https://www.musicpd.org/) to the player's two CS43131 DACs, gapless, PCM up to 384 kHz.
+- Music playback with [MPD](https://www.musicpd.org/), gapless, PCM up to 384 kHz, without annoying delay before start.
 - A new touch UI ([LVGL](https://lvgl.io/)): folders, queue, playlists, library, now playing, lock screen, settings.
 - Bluetooth headphones (A2DP: SBC, aptX, aptX HD) with their battery level and buttons.
 - USB storage mode and USB DAC mode, S/PDIF output on the 3.5 mm jack.
