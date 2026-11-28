@@ -249,7 +249,7 @@ const struct screen_ops scr_playlists = { .name = "playlists", .create = create 
 struct pl {
 	lv_obj_t *scr, *list;
 	char name[512];
-	struct items it;
+	struct pager z;
 	struct groups g;
 	int target;
 	char **labels, **presets;
@@ -258,10 +258,8 @@ struct pl {
 
 static void pl_reload(struct pl *p)
 {
-	items_free(&p->it);
-	if (mpdc_playlist_songs(p->name, &p->it) < 0)
-		p->it.n = 0;
-	groups_build(&p->g, &p->it);
+	pager_open(&p->z, p->name);
+	groups_build(&p->g, &p->z);
 	vlist_reload(p->list);
 }
 
@@ -283,11 +281,15 @@ static void pl_row(void *ctx, int row, struct vrow *r)
 		return;
 	}
 
-	snprintf(r->text, sizeof(r->text), "%s", song_label(&p->it.v[idx], buf, sizeof(buf)));
-	snprintf(r->sub, sizeof(r->sub), "%s", p->it.v[idx].artist);
-	if (p->it.v[idx].dur_ms)
-		fmt_time(r->right, sizeof(r->right), p->it.v[idx].dur_ms);
+	const struct item *it = pager_at(&p->z, idx);
+
 	r->active = !strcmp(p->name, app_loaded_playlist()) && idx == app.mpd.song_pos;
+	if (!it)
+		return;
+	snprintf(r->text, sizeof(r->text), "%s", song_label(it, buf, sizeof(buf)));
+	snprintf(r->sub, sizeof(r->sub), "%s", it->artist);
+	if (it->dur_ms)
+		fmt_time(r->right, sizeof(r->right), it->dur_ms);
 }
 
 static void pl_click(void *ctx, int row)
@@ -298,7 +300,7 @@ static void pl_click(void *ctx, int row)
 	if (idx < 0)
 		return;
 
-	if (!strcmp(p->name, app_loaded_playlist()) && app.mpd.queue_len == p->it.n)
+	if (!strcmp(p->name, app_loaded_playlist()) && app.mpd.queue_len == p->z.n)
 		mpdc_play_pos(idx);
 	else
 		mpdc_playlist_play(p->name, idx);
@@ -311,7 +313,9 @@ static void pl_picked(int choice, void *ctx)
 	int i = p->target;
 	char *path, *slash;
 
-	if (i >= p->it.n)
+	const struct item *it = pager_at(&p->z, i);
+
+	if (!it)
 		return;
 	switch (choice) {
 	case 0:
@@ -322,14 +326,14 @@ static void pl_picked(int choice, void *ctx)
 			mpdc_playlist_move(p->name, i, i - 1);
 		break;
 	case 2:
-		if (i + 1 < p->it.n)
+		if (i + 1 < p->z.n)
 			mpdc_playlist_move(p->name, i, i + 1);
 		break;
 	case 3:
 		mpdc_playlist_remove(p->name, i);
 		break;
 	case 4:
-		path = mpdc_path_for_uri(p->it.v[i].uri);
+		path = mpdc_path_for_uri(it->uri);
 		if (path && (slash = strrchr(path, '/'))) {
 			*slash = 0;
 			folders_open_at(path, slash + 1);
@@ -343,14 +347,13 @@ static void pl_hold(void *ctx, int row)
 {
 	static const char *const items[] = { "Play from here", "Move up", "Move down", "Remove", "Go to folder" };
 	struct pl *p = ctx;
+	const struct item *it = pager_at(&p->z, p->g.map[row]);
 	char buf[256];
-	int idx = p->g.map[row];
 
-	if (idx < 0)
+	if (!it)
 		return;
-
-	p->target = idx;
-	ui_menu(song_label(&p->it.v[idx], buf, sizeof(buf)), items, 5, pl_picked, p);
+	p->target = p->g.map[row];
+	ui_menu(song_label(it, buf, sizeof(buf)), items, 5, pl_picked, p);
 }
 
 static const struct vlist_ops pl_ops = { .count = pl_count, .row = pl_row, .click = pl_click, .hold = pl_hold };
@@ -397,6 +400,10 @@ static void pl_title_picked(int idx, void *ctx)
 			nav_push(&scr_np, NULL);
 		break;
 	case 1:
+		if (p->z.n > SORT_MAX) {
+			ui_toast("Too many songs to sort");
+			break;
+		}
 		sort_presets_free(p->labels, p->presets, p->n_presets);
 		p->n_presets = sort_presets(&p->labels, &p->presets);
 		ui_menu("Sort by", (const char *const *)p->labels, p->n_presets, pl_sort_picked, p);
@@ -421,7 +428,7 @@ static void pl_delete(lv_event_t *e)
 
 	sort_presets_free(p->labels, p->presets, p->n_presets);
 	groups_free(&p->g);
-	items_free(&p->it);
+	pager_free(&p->z);
 	free(p);
 }
 
@@ -441,7 +448,7 @@ static lv_obj_t *pl_create(void *arg)
 	lv_obj_set_pos(p->list, 0, CONTENT_Y);
 	vlist_set_empty(p->list, "Empty playlist");
 	pl_reload(p);
-	if (!strcmp(p->name, app_loaded_playlist()) && app.mpd.song_pos >= 0 && app.mpd.song_pos < p->it.n)
+	if (!strcmp(p->name, app_loaded_playlist()) && app.mpd.song_pos >= 0 && app.mpd.song_pos < p->z.n)
 		vlist_scroll_to(p->list, groups_row_of(&p->g, app.mpd.song_pos), true);
 	app_listen(p->scr, EV_PLAYLISTS | EV_SONG | EV_QUEUE | EV_SETTINGS, pl_event, p);
 	lv_obj_add_event_cb(p->scr, pl_delete, LV_EVENT_DELETE, p);

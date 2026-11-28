@@ -10,7 +10,7 @@
 
 struct queue {
 	lv_obj_t *scr, *title, *list;
-	struct items it;
+	struct pager z;
 	struct groups g;
 	int sel;
 	char **labels, **presets;
@@ -34,14 +34,16 @@ static void row(void *ctx, int rowi, struct vrow *r)
 		r->header = true;
 		return;
 	}
-	const struct item *it = &q->it.v[idx];
+	const struct item *it = pager_at(&q->z, idx);
 
+	r->active = idx == app.mpd.song_pos;
+	r->icon = r->active ? (app.mpd.state == PS_PLAY ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE) : NULL;
+	if (!it)
+		return;
 	snprintf(r->text, sizeof(r->text), "%s", song_label(it, buf, sizeof(buf)));
 	snprintf(r->sub, sizeof(r->sub), "%s", it->artist);
 	if (it->dur_ms)
 		fmt_time(r->right, sizeof(r->right), it->dur_ms);
-	r->active = idx == app.mpd.song_pos;
-	r->icon = r->active ? (app.mpd.state == PS_PLAY ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE) : NULL;
 }
 
 static void set_title(struct queue *q)
@@ -60,11 +62,9 @@ static void set_title(struct queue *q)
 
 static void reload(struct queue *q, bool to_current)
 {
-	items_free(&q->it);
-	if (mpdc_queue(&q->it) < 0)
-		q->it.n = 0;
+	pager_open(&q->z, NULL);
 	set_title(q);
-	groups_build(&q->g, &q->it);
+	groups_build(&q->g, &q->z);
 	vlist_reload(q->list);
 	if (to_current && app.mpd.song_pos >= 0)
 		vlist_scroll_to(q->list, groups_row_of(&q->g, app.mpd.song_pos), true);
@@ -94,9 +94,10 @@ static void item_picked(int choice, void *ctx)
 {
 	struct queue *q = lv_obj_get_user_data(lv_screen_active());
 	int idx = (int)(intptr_t)ctx;
+	const struct item *it = q ? pager_at(&q->z, idx) : NULL;
 	char *path, *slash;
 
-	if (!q || idx >= q->it.n)
+	if (!it)
 		return;
 	switch (choice) {
 	case Q_PLAY:
@@ -111,14 +112,14 @@ static void item_picked(int choice, void *ctx)
 			mpdc_queue_move(idx, idx - 1);
 		break;
 	case Q_DOWN:
-		if (idx + 1 < q->it.n)
+		if (idx + 1 < q->z.n)
 			mpdc_queue_move(idx, idx + 1);
 		break;
 	case Q_REMOVE:
 		mpdc_queue_delete(idx);
 		break;
 	case Q_FOLDER:
-		path = mpdc_path_for_uri(q->it.v[idx].uri);
+		path = mpdc_path_for_uri(it->uri);
 		if (path && (slash = strrchr(path, '/'))) {
 			*slash = 0;
 			folders_open_at(path, slash + 1);
@@ -126,7 +127,7 @@ static void item_picked(int choice, void *ctx)
 		free(path);
 		break;
 	case Q_INFO:
-		ui_info("File", q->it.v[idx].uri);
+		ui_info("File", it->uri);
 		break;
 	}
 }
@@ -134,13 +135,12 @@ static void item_picked(int choice, void *ctx)
 static void hold(void *ctx, int row)
 {
 	static const char *const items[] = { "Play", "Play next", "Move up", "Move down", "Remove", "Go to folder", "File" };
+	struct queue *q = ctx;
+	const struct item *it = pager_at(&q->z, q->g.map[row]);
 	char buf[256];
-	int idx = ((struct queue *)ctx)->g.map[row];
 
-	if (idx < 0)
-		return;
-
-	ui_menu(song_label(&((struct queue *)ctx)->it.v[idx], buf, sizeof(buf)), items, 7, item_picked, (void *)(intptr_t)idx);
+	if (it)
+		ui_menu(song_label(it, buf, sizeof(buf)), items, 7, item_picked, (void *)(intptr_t)q->g.map[row]);
 }
 
 static const struct vlist_ops ops = { .count = count, .row = row, .click = click, .hold = hold };
@@ -190,6 +190,10 @@ static void title_picked(int idx, void *ctx)
 			vlist_scroll_to(q->list, groups_row_of(&q->g, app.mpd.song_pos), true);
 		break;
 	case 4:
+		if (q->z.n > SORT_MAX) {
+			ui_toast("Too many songs to sort");
+			break;
+		}
 		sort_presets_free(q->labels, q->presets, q->n_presets);
 		q->n_presets = sort_presets(&q->labels, &q->presets);
 		ui_menu("Sort by", (const char *const *)q->labels, q->n_presets, sort_picked, q);
@@ -223,7 +227,7 @@ static void on_delete(lv_event_t *e)
 
 	sort_presets_free(q->labels, q->presets, q->n_presets);
 	groups_free(&q->g);
-	items_free(&q->it);
+	pager_free(&q->z);
 	free(q);
 }
 

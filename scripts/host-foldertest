@@ -1,7 +1,8 @@
 #!/bin/sh
-# Folder playback regression test on the host: a real MPD (null output) and the headless discui, driven through its
-# debug socket. Covers start track, rejected files, play through folders (chain, stale state, wrap, stop), recursive
-# order and shuffle. Needs mpd, mpc, socat, ffmpeg. Usage: scripts/host-foldertest
+# Folder and library playback regression test on the host: a real MPD (null output) and the headless discui, driven
+# through its debug socket. Covers start track, rejected files, play through folders (chain, stale state, wrap, stop),
+# recursive order, shuffle, and the Library Songs, Hi-res and Recently added menus. Needs mpd, mpc, socat, ffmpeg.
+# Usage: scripts/host-foldertest
 set -e
 TOP=$(cd "$(dirname "$0")/.." && pwd)
 UI=$TOP/output/host-discfw/src/discui/discui
@@ -43,14 +44,26 @@ wait_cur() {
 	done
 }
 tone() {
-	mkdir -p "$(dirname "$M/$1")"
-	ffmpeg -nostdin -loglevel error -f lavfi -i "sine=frequency=440:duration=${2:-1.5}" -ac 2 -c:a flac "$M/$1"
+	f=$1
+	d=${2:-1.5}
+	shift $(($# < 2 ? $# : 2))
+	mkdir -p "$(dirname "$M/$f")"
+	ffmpeg -nostdin -loglevel error -f lavfi -i "sine=frequency=440:duration=$d" -ac 2 "$@" -c:a flac "$M/$f"
 }
 
 for f in A/1 A/2 A/10 B/1 B/2 C/x C/y D/D1/1 D/D2/1 E/1 F/1 G/1 H/1 I/1 J/1 R/r1 R/r2 R/s2/1 R/s10/1 Z/1; do
 	tone "$f.flac"
 done
 for i in 1 2 3 4 5 6 7 8; do tone "S/$i.flac" 30; done
+tone HR/1.flac 1.5 -ar 96000 -sample_fmt s32
+tone L/1.flac 1.5 -metadata album=Alb -metadata album_artist=X -metadata track=1
+tone L/2.flac 1.5 -metadata album=Alb -metadata album_artist=X -metadata track=2
+mkdir -p "$M/P"
+i=0
+while [ $i -lt 2100 ]; do
+	cp "$M/A/1.flac" "$M/P/p$i.flac"
+	i=$((i + 1))
+done
 printf 'not audio' > "$M/C/bad.alac"
 
 mkdir -p "$W/data/mpd/playlists"
@@ -60,6 +73,7 @@ playlist_directory "$W/data/mpd/playlists"
 database {
 	plugin "simple"
 	path "$W/data/mpd/database"
+	compress "no"
 }
 pid_file "$R/mpd.pid"
 bind_to_address "$R/mpd.sock"
@@ -79,7 +93,7 @@ start_ui() {
 	[ -n "$uipid" ] && kill "$uipid" && wait "$uipid" 2>/dev/null || true
 	printf '%s\n' "$@" > "$W/data/settings"
 	DISC_RUN_DIR=$R DISC_DATA_DIR=$W/data DISC_MUSIC_ROOT=$M DISCUI_ROTATE=0 ASAN_OPTIONS=detect_leaks=0 \
-		"$UI" --host > "$W/discui.log" 2>&1 &
+		"$UI" --host >> "$W/discui.log" 2>&1 &
 	uipid=$!
 	i=0
 	while [ ! -S "$R/discui.sock" ] && [ $i -lt 40 ]; do
@@ -149,6 +163,78 @@ for i in 1 2 3 4 5 6; do
 done
 check "shuffle starts at a random track" "$(echo "$firsts" | tr ' ' '\n' | grep -v '^$' | sort -u | wc -l | tr -d ' ' | sed 's/^[2-9]$/varied/')" varied
 check "shuffle sets random" "$(mpc -h "$R/mpd.sock" status | grep -o 'random: on')" "random: on"
+
+lib_row() { echo $((88 + 52 * $1)); }
+lib_scroll() {
+	ui swipe 180 330 180 80 600
+	sleep 1.5
+}
+lib_menu() {
+	ui hold 180 "$1"
+	sleep 0.8
+	ui tap 180 "$(lib_row "$2")"
+	sleep 0.6
+}
+qn() { mpc -h "$R/mpd.sock" playlist | wc -l | tr -d ' '; }
+all=$(mpc -h "$R/mpd.sock" listall | wc -l | tr -d ' ')
+
+start_ui play.order=seq
+m clear
+ui goto library
+ui tap 180 "$(lib_row 3)"
+ui tap 180 "$(lib_row 0)"
+sleep 0.6
+check "Songs: Shuffle all queues every song" "$(qn) $(mpc -h "$R/mpd.sock" status | grep -o 'random: on')" "$all random: on"
+
+start_ui play.order=seq
+m clear
+ui goto library
+ui tap 180 "$(lib_row 3)"
+ui tap 180 "$(lib_row 1)"
+sleep 0.6
+check "Songs: tapped song plays, queue in title order" "$(cur) $(q | cut -d' ' -f1-3) $(qn)" "A/1.flac A/1.flac B/1.flac D/D1/1.flac $all"
+
+start_ui play.order=seq
+m clear
+ui goto library
+lib_menu "$(lib_row 3)" 1
+check "hold Songs: Shuffle" "$(qn) $(mpc -h "$R/mpd.sock" status | grep -o 'random: on')" "$all random: on"
+
+start_ui play.order=seq
+m clear
+ui goto library
+lib_scroll
+lib_menu 134 0
+check "hold Hi-res: Play, each song once" "$(q)" "HR/1.flac"
+
+start_ui play.order=seq
+m clear
+ui goto library
+lib_scroll
+lib_menu 85 0
+check "hold Recently added: Play in album order" "$(q)" "L/1.flac L/2.flac"
+
+texts() { printf 'dump\n' | socat -t5 - "UNIX-CONNECT:$R/discui.sock" | sed -n 's/.* text=\(..*\)$/\1/p' | tr '\n' '|'; }
+
+start_ui pl.group=folder
+m clear
+m add A
+ui goto queue
+sleep 0.5
+check "queue: small queue keeps folder headers" "$(texts | grep -o '|A|1.flac|')" "|A|1.flac|"
+
+start_ui pl.group=folder
+m clear
+m add P
+m add A
+ui goto queue
+sleep 0.5
+check "queue over 2000 songs: flat, first page loaded" "$(texts | grep -o 'Queue|p0.flac|')" "Queue|p0.flac|"
+m play 2101
+ui back
+ui goto queue
+sleep 0.5
+check "queue over 2000 songs: opens at the current song, its page loaded" "$(texts | grep -o '|10.flac|')" "|10.flac|"
 
 if grep -qE "ERROR: AddressSanitizer|runtime error" "$W/discui.log"; then
 	fail=$((fail + 1))

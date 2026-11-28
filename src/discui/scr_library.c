@@ -1,6 +1,7 @@
 #include "mpdc.h"
 #include "ui.h"
 
+#include <disc/mpddb.h>
 #include <disc/settings.h>
 #include <disc/text.h>
 #include <stdio.h>
@@ -15,8 +16,8 @@
 #define SEARCH_ALBUMS 30
 #define SEARCH_SONGS 100
 
-enum view { V_ROOT, V_SEARCH, V_ARTISTS, V_ALBUMS, V_GENRES, V_COMPOSERS, V_YEARS, V_RECENT, V_HIRES, V_TRACKS };
-enum kind { K_ROOT, K_GAP, K_SCAN, K_SECTION, K_DISC, K_NAME, K_ALBUM, K_YEAR, K_SONG };
+enum view { V_ROOT, V_SEARCH, V_ARTISTS, V_ALBUMS, V_SONGS, V_GENRES, V_COMPOSERS, V_YEARS, V_RECENT, V_HIRES, V_TRACKS };
+enum kind { K_ROOT, K_GAP, K_SCAN, K_SECTION, K_DISC, K_NAME, K_ALBUM, K_YEAR, K_SONG, K_SHUFFLE };
 
 struct frame {
 	enum view v;
@@ -52,8 +53,8 @@ static const struct {
 	enum view v;
 } roots[] = {
 	{ "Search…", V_SEARCH }, { "Artists", V_ARTISTS }, { "Albums", V_ALBUMS },
-	{ "Genres", V_GENRES },   { "Composers", V_COMPOSERS }, { "Years", V_YEARS },
-	{ "Recently added", V_RECENT }, { "Hi-res", V_HIRES },
+	{ "Songs", V_SONGS },     { "Genres", V_GENRES },   { "Composers", V_COMPOSERS },
+	{ "Years", V_YEARS },     { "Recently added", V_RECENT }, { "Hi-res", V_HIRES },
 };
 
 static const char *const sections[] = { "Artists", "Albums", "Songs" };
@@ -63,6 +64,21 @@ static const char *const hires[] = {
 	"(AudioFormat =~ \"192000:*:*\")", "(AudioFormat =~ \"352800:*:*\")", "(AudioFormat =~ \"384000:*:*\")",
 	"(AudioFormat =~ \"*:24:*\")",     "(AudioFormat =~ \"*:32:*\")",
 };
+
+static bool hires_song(const struct mpddb_song *s)
+{
+	char *bits;
+	unsigned long rate = s->format ? strtoul(s->format, &bits, 10) : 0;
+
+	return rate && *bits == ':' && (rate > 48000 || !strncmp(bits, ":24:", 4) || !strncmp(bits, ":32:", 4));
+}
+
+static int hires_songs(struct items *it)
+{
+	int n = mpdc_db_songs(hires_song, it);
+
+	return n < 0 ? mpdc_songs_any(hires, sizeof(hires) / sizeof(hires[0]), it) : n;
+}
 
 static char last_query[256];
 
@@ -215,21 +231,47 @@ static void load_year_albums(struct lib *l, int year)
 	sort_albums(&l->al, cmp_album_artist);
 }
 
+static int recent_songs(struct items *it)
+{
+	return mpdc_recent_songs(RECENT_SONGS, it);
+}
+
+static int album_of(const struct albums *al, const struct item *it)
+{
+	const char *artist = item_album_artist(it);
+
+	if (!it->album[0])
+		return -1;
+	for (int j = 0; j < al->n; j++)
+		if (!strcmp(al->v[j].name, it->album) && !strcmp(al->v[j].artist, artist))
+			return j;
+	return -1;
+}
+
+static void recent_albums(const struct items *it, struct albums *al)
+{
+	for (int i = 0; i < it->n && al->n < RECENT_ALBUMS; i++)
+		if (it->v[i].album[0] && album_of(al, &it->v[i]) < 0)
+			albums_push(al, it->v[i].album, item_album_artist(&it->v[i]), it->v[i].year);
+}
+
 static void load_recent(struct lib *l)
 {
 	struct items it;
 
-	if (mpdc_songs("(added-since \"1\")", "-Added", RECENT_SONGS, &it) < 0)
+	if (recent_songs(&it) < 0)
 		return;
-	for (int i = 0; i < it.n && l->al.n < RECENT_ALBUMS; i++) {
-		const char *artist = item_album_artist(&it.v[i]);
-		bool seen = !it.v[i].album[0];
-		for (int j = 0; j < l->al.n && !seen; j++)
-			seen = !strcmp(l->al.v[j].name, it.v[i].album) && !strcmp(l->al.v[j].artist, artist);
-		if (!seen)
-			albums_push(&l->al, it.v[i].album, artist, it.v[i].year);
-	}
+	recent_albums(&it, &l->al);
 	items_free(&it);
+}
+
+static void load_songs(struct lib *l)
+{
+	if (mpdc_all_songs(&l->it) <= 0)
+		return;
+	add_row(l, K_SHUFFLE, 0);
+	for (int i = 0; i < l->it.n; i++)
+		add_row(l, K_SONG, i);
 }
 
 static void load_search(struct lib *l, const char *q)
@@ -248,7 +290,7 @@ static void load_search(struct lib *l, const char *q)
 		for (int i = 0; i < l->al.n && i < SEARCH_ALBUMS; i++)
 			add_row(l, K_ALBUM, i);
 	}
-	if (tag_expr(e, sizeof(e), "Title", "contains_ci", q) && mpdc_songs(e, NULL, SEARCH_SONGS, &l->it) > 0) {
+	if (tag_expr(e, sizeof(e), "Title", "contains_ci", q) && mpdc_songs(e, SEARCH_SONGS, &l->it) > 0) {
 		add_row(l, K_SECTION, 2);
 		for (int i = 0; i < l->it.n; i++)
 			add_row(l, K_SONG, i);
@@ -260,7 +302,7 @@ static void load_tracks(struct lib *l, struct frame *f)
 	char e[EXPR];
 	bool discs = false;
 
-	if (!album_expr(e, sizeof(e), f->album, f->artist, f->expr) || mpdc_songs(e, NULL, 0, &l->it) < 0)
+	if (!album_expr(e, sizeof(e), f->album, f->artist, f->expr) || mpdc_songs(e, 0, &l->it) < 0)
 		return;
 	for (int i = 1; i < l->it.n; i++)
 		discs |= l->it.v[i].disc != l->it.v[0].disc;
@@ -289,6 +331,7 @@ static const char *empty_text(enum view v)
 	case V_HIRES:
 		return "No hi-res music";
 	case V_TRACKS:
+	case V_SONGS:
 		return "No songs";
 	default:
 		return "Library is empty.\nSettings → Library → Scan";
@@ -342,6 +385,9 @@ static void load(struct lib *l)
 	case V_TRACKS:
 		load_tracks(l, f);
 		break;
+	case V_SONGS:
+		load_songs(l);
+		break;
 	}
 	if (f->v == V_ALBUMS || f->v == V_RECENT || f->v == V_HIRES)
 		for (int i = 0; i < l->al.n; i++)
@@ -382,10 +428,10 @@ static void song_row(struct lib *l, const struct item *it, struct vrow *r)
 			snprintf(r->sub, sizeof(r->sub), "%s", it->artist);
 	} else {
 		snprintf(r->text, sizeof(r->text), "%s", title);
-		if (it->album[0])
+		if (it->artist[0] && it->album[0])
 			snprintf(r->sub, sizeof(r->sub), "%s · %s", it->artist, it->album);
 		else
-			snprintf(r->sub, sizeof(r->sub), "%s", it->artist);
+			snprintf(r->sub, sizeof(r->sub), "%s", it->artist[0] ? it->artist : it->album);
 	}
 	if (it->dur_ms)
 		fmt_time(r->right, sizeof(r->right), it->dur_ms);
@@ -435,6 +481,11 @@ static void row(void *ctx, int idx, struct vrow *r)
 	case K_SONG:
 		song_row(l, &l->it.v[w->i], r);
 		break;
+	case K_SHUFFLE:
+		r->icon = LV_SYMBOL_SHUFFLE;
+		snprintf(r->text, sizeof(r->text), "Shuffle all");
+		snprintf(r->right, sizeof(r->right), "%d song%s", l->it.n, l->it.n == 1 ? "" : "s");
+		break;
 	}
 }
 
@@ -450,6 +501,10 @@ static uint32_t letter(void *ctx, int idx)
 		return index_letter(l->nm.key[w->i]);
 	if (w->k == K_ALBUM && (f->v == V_HIRES || (f->v == V_ALBUMS && !f->by_year && !f->year)))
 		return index_letter(l->al.v[w->i].name);
+	if (w->k == K_SONG && f->v == V_SONGS) {
+		char buf[256];
+		return index_letter(song_label(&l->it.v[w->i], buf, sizeof(buf)));
+	}
 	return '#';
 }
 
@@ -495,6 +550,18 @@ static void play(char *const *uris, int n, int start, bool shuffle, const char *
 		nav_push(&scr_np, NULL);
 	else
 		ui_toast("Could not start playback");
+}
+
+static void shuffle_all(void)
+{
+	int n;
+
+	mpdc_set_order("random");
+	n = mpdc_play_all("library:Songs");
+	if (n > 0)
+		nav_push(&scr_np, NULL);
+	else
+		ui_toast(n ? "Could not start playback" : "No music here");
 }
 
 static char **uris_of(const struct items *it)
@@ -575,6 +642,9 @@ static void click(void *ctx, int idx)
 	case K_SONG:
 		play_song(l, w->i);
 		break;
+	case K_SHUFFLE:
+		shuffle_all();
+		break;
 	default:
 		break;
 	}
@@ -585,14 +655,56 @@ enum { A_PLAY, A_SHUFFLE, A_QUEUE, A_PLAYLIST, A_FOLDER, A_ALBUM };
 static struct {
 	struct lib *l;
 	char expr[EXPR], label[256], album[256], artist[256];
+	enum view src;
 	int item;
 	bool current;
 	int map[8];
 } menu;
 
+struct ranked {
+	const struct item *it;
+	int album;
+};
+
+static int cmp_ranked(const void *a, const void *b)
+{
+	const struct ranked *p = a, *q = b;
+	const struct item *x = p->it, *y = q->it;
+
+	if (p->album != q->album)
+		return p->album < q->album ? -1 : 1;
+	if (x->disc != y->disc)
+		return x->disc < y->disc ? -1 : 1;
+	if (x->track != y->track)
+		return x->track < y->track ? -1 : 1;
+	return nat_cmp(x->uri, y->uri);
+}
+
+static int recent_uris(const struct items *tmp, char ***uris)
+{
+	struct albums al = { 0 };
+	struct ranked *v = calloc(tmp->n + 1, sizeof(*v));
+	int n = 0;
+
+	recent_albums(tmp, &al);
+	for (int i = 0; i < tmp->n; i++) {
+		int a = album_of(&al, &tmp->v[i]);
+		if (a >= 0)
+			v[n++] = (struct ranked){ &tmp->v[i], a };
+	}
+	albums_free(&al);
+	qsort(v, n, sizeof(*v), cmp_ranked);
+	*uris = calloc(n + 1, sizeof(char *));
+	for (int i = 0; i < n; i++)
+		(*uris)[i] = v[i].it->uri;
+	free(v);
+	return n;
+}
+
 static int menu_songs(struct items *tmp, char ***uris)
 {
 	struct lib *l = menu.l;
+	int n;
 
 	memset(tmp, 0, sizeof(*tmp));
 	if (menu.current) {
@@ -604,10 +716,20 @@ static int menu_songs(struct items *tmp, char ***uris)
 		(*uris)[0] = l->it.v[menu.item].uri;
 		return 1;
 	}
-	if (mpdc_songs(menu.expr, NULL, 0, tmp) < 0) {
+	if (menu.src == V_SONGS)
+		n = mpdc_all_songs(tmp);
+	else if (menu.src == V_HIRES)
+		n = hires_songs(tmp);
+	else if (menu.src == V_RECENT)
+		n = recent_songs(tmp);
+	else
+		n = mpdc_songs(menu.expr, 0, tmp);
+	if (n < 0) {
 		*uris = calloc(1, sizeof(char *));
 		return 0;
 	}
+	if (menu.src == V_RECENT)
+		return recent_uris(tmp, uris);
 	*uris = uris_of(tmp);
 	return tmp->n;
 }
@@ -624,6 +746,16 @@ static void menu_picked(int idx, void *ctx)
 		return;
 	if (menu.map[idx] == A_ALBUM) {
 		push_tracks(l, menu.album, menu.artist, "");
+		return;
+	}
+	if (menu.src == V_SONGS && menu.map[idx] == A_SHUFFLE) {
+		shuffle_all();
+		return;
+	}
+	if (menu.src == V_SONGS && menu.map[idx] == A_QUEUE) {
+		added = mpdc_append_all();
+		snprintf(msg, sizeof(msg), "Added %d to queue", added < 0 ? 0 : added);
+		ui_toast(msg);
 		return;
 	}
 	n = menu_songs(&tmp, &uris);
@@ -671,9 +803,15 @@ static void open_menu(struct lib *l, const char *title, bool song, bool folder, 
 	ui_menu(title, items, n, menu_picked, NULL);
 }
 
+static bool whole_view_menu(enum view v)
+{
+	return v == V_SONGS || v == V_HIRES || v == V_RECENT;
+}
+
 static void menu_reset(const char *label)
 {
 	menu.expr[0] = menu.album[0] = menu.artist[0] = 0;
+	menu.src = V_ROOT;
 	menu.item = -1;
 	menu.current = false;
 	snprintf(menu.label, sizeof(menu.label), "%s", label);
@@ -689,6 +827,13 @@ static void hold(void *ctx, int idx)
 	char label[256];
 
 	switch (w->k) {
+	case K_ROOT:
+		if (!whole_view_menu(roots[w->i].v))
+			break;
+		menu_reset(roots[w->i].label);
+		menu.src = roots[w->i].v;
+		open_menu(l, menu.label, false, false, false);
+		break;
 	case K_NAME:
 		menu_reset(l->nm.v[w->i]);
 		if (!tag_expr(menu.expr, sizeof(menu.expr), mpd_tag_name(f->v == V_SEARCH ? artist_tag() : f->tag), "==", l->nm.v[w->i]))
@@ -713,7 +858,7 @@ static void hold(void *ctx, int idx)
 		menu.item = w->i;
 		snprintf(menu.album, sizeof(menu.album), "%s", it->album);
 		snprintf(menu.artist, sizeof(menu.artist), "%s", item_album_artist(it));
-		open_menu(l, song_label(it, label, sizeof(label)), true, true, f->v == V_SEARCH && it->album[0]);
+		open_menu(l, song_label(it, label, sizeof(label)), true, true, (f->v == V_SEARCH || f->v == V_SONGS) && it->album[0]);
 		break;
 	default:
 		break;
@@ -729,6 +874,12 @@ static void title_click(lv_event_t *e)
 	if (f->v == V_TRACKS) {
 		menu.current = true;
 		open_menu(l, f->title, false, true, false);
+		return;
+	}
+	if (whole_view_menu(f->v)) {
+		menu.src = f->v;
+		menu.current = f->v == V_SONGS;
+		open_menu(l, f->title, false, false, false);
 		return;
 	}
 	if (f->v != V_ALBUMS || (!f->expr[0] && !f->year))

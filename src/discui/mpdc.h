@@ -6,6 +6,7 @@
 struct item {
 	char *uri, *title, *artist, *album, *albumartist;
 	unsigned dur_ms;
+	long added;
 	int id, disc, track, year;
 };
 
@@ -41,6 +42,9 @@ void mpdc_update(const char *abs_dir);
 bool mpdc_folder_scanned(const char *abs_dir);
 
 int mpdc_queue(struct items *out);
+int mpdc_queue_len(void);
+int mpdc_list_len(const char *playlist);
+int mpdc_list_range(const char *playlist, unsigned start, unsigned end, struct items *out);
 bool mpdc_queue_delete(int pos);
 bool mpdc_queue_delete_range(int start, int end);
 unsigned mpdc_set_origin(const char *origin);
@@ -48,6 +52,8 @@ bool mpdc_queue_move(int from, int to);
 bool mpdc_queue_clear(void);
 const char *mpdc_queue_origin(void);
 const char *app_loaded_playlist(void);
+#define SORT_MAX 5000
+
 void items_sort(struct items *it, const char *criteria);
 int sort_presets(char ***labels, char ***criteria);
 void sort_presets_free(char **labels, char **criteria, int n);
@@ -86,6 +92,14 @@ void names_free(struct names *nm);
 int mpdc_list_tag(enum mpd_tag_type tag, enum mpd_tag_type sort_tag, const char *expr, struct names *out);
 void albums_free(struct albums *a);
 int mpdc_albums(const char *const *exprs, int n_exprs, struct albums *out);
-int mpdc_songs(const char *expr, const char *sort, unsigned window, struct items *out);
+struct mpddb_song;
+
+int mpdc_songs(const char *expr, unsigned window, struct items *out);
+int mpdc_songs_any(const char *const *exprs, int n_exprs, struct items *out);
+int mpdc_all_songs(struct items *out);
+int mpdc_db_songs(bool (*keep)(const struct mpddb_song *s), struct items *out);
+int mpdc_recent_songs(int newest, struct items *out);
+int mpdc_play_all(const char *origin);
+int mpdc_append_all(void);
 const char *item_album_artist(const struct item *it);
 bool mpdc_stats(unsigned *songs, unsigned *albums, unsigned *artists, unsigned long *db_update, unsigned long *play_time);

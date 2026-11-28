@@ -13,7 +13,7 @@ What you get today:
 - USB storage mode and USB DAC mode, S/PDIF output on the 3.5 mm jack.
 - Wi-Fi with SSH/SFTP and MPD over the network, so any MPD app can control the player.
 - Equalizer: AutoEQ presets from the card, a 10-band graphic EQ and a parametric editor, a preset per output and per Bluetooth headset.
-- Battery indicator, charge limit, low-battery power-off, sleep timer, configurable buttons.
+- Battery indicator, charge limit (with "skip once" option), low-battery power-off, sleep timer, configurable buttons.
 
 | | | |
 |:---:|:---:|:---:|

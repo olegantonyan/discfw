@@ -43,6 +43,7 @@ bind_to_address "/run/mpd.sock"
 replaygain "$rg"
 volume_normalization "no"
 max_connections "16"
+max_playlist_length "65536"
 local_permissions "read,add,control,admin"
 CONF
 	if [ "$(cfg net.mpd)" = 1 ]; then

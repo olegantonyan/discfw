@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define GROUP_MAX 2000
+
 enum mode { G_NONE, G_ALBUM, G_FOLDER, G_BOTH };
 
 static void dir_of(const char *uri, char *out, size_t len)
@@ -57,20 +59,21 @@ static void add_head(struct groups *g, const struct item *it, enum mode m)
 	g->map[g->n++] = -(++g->n_heads);
 }
 
-void groups_build(struct groups *g, const struct items *it)
+void groups_build(struct groups *g, struct pager *p)
 {
 	enum mode m = set_get_enum("pl.group");
 	char key[2200], prev[2200] = "";
 
 	groups_free(g);
-	if (m < 0)
+	if (m < 0 || p->n > GROUP_MAX)
 		m = G_NONE;
-	g->map = malloc((it->n * 2 + 1) * sizeof(int));
-	for (int i = 0; i < it->n; i++) {
-		if (m != G_NONE) {
-			key_of(&it->v[i], m, key, sizeof(key));
-			if (!i || strcmp(key, prev)) {
-				add_head(g, &it->v[i], m);
+	g->map = malloc((p->n * 2 + 1) * sizeof(int));
+	for (int i = 0; i < p->n; i++) {
+		const struct item *it = m != G_NONE ? pager_at(p, i) : NULL;
+		if (it) {
+			key_of(it, m, key, sizeof(key));
+			if (strcmp(key, prev)) {
+				add_head(g, it, m);
 				snprintf(prev, sizeof(prev), "%s", key);
 			}
 		}
